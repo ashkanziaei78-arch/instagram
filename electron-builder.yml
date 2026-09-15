@@ -3,17 +3,31 @@ productName: IG Auto Suite
 directories:
   buildResources: build
   output: release
+
+# فقط خروجی ساخت و package.json.
+#
+# هشدار از تجربه: اینجا الگوی نفی `'!**/{docs,src}'` ننویسید. آن الگو هر پوشه‌ای
+# به نام src را در *هر عمقی* حذف می‌کند — از جمله node_modules/.../debug/src که
+# وابستگی Express است. نتیجه‌اش اپی بود که بسته‌بندی می‌شد ولی موقع اجرا با
+# «Cannot find module» می‌مرد. به نفی نیازی هم نیست: وقتی files فهرست صریح دارد،
+# پوشه‌ی src پروژه خودبه‌خود بیرون می‌ماند و node_modules تولیدی همیشه
+# مستقل از این فهرست اضافه می‌شود.
 files:
   - out/**
   - package.json
-  - '!**/{.vscode,.git,docs,src}'
+
+# فایل‌های بومی و WASM باید بیرون از asar باز شوند تا در زمان اجرا
+# با مسیر واقعی فایل‌سیستم قابل بارگذاری باشند.
 asarUnpack:
   - '**/*.node'
+  - '**/node_modules/node-sqlite3-wasm/**'
+
 win:
   target:
     - target: nsis
       arch: [x64]
   artifactName: ${productName}-${version}-setup.${ext}
+
 nsis:
   oneClick: false
   perMachine: false

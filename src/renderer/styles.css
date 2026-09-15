@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: Vazirmatn, 'Segoe UI', Tahoma, sans-serif;
+  background: #0b0f17;
+  color: #e6e9ef;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ارقام فارسی در جاهایی که عدد خوانا مهم است، لاتین می‌مانند تا با API هم‌خوان باشند */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #0e1420;
+}
+::-webkit-scrollbar-thumb {
+  background: #263146;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #33415c;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-sm;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
+           transition-colors disabled:cursor-not-allowed disabled:opacity-45 select-none;
+  }
+  .btn-primary {
+    @apply btn bg-gradient-to-l from-[#833ab4] via-[#c13584] to-[#e1306c] text-white
+           hover:brightness-110 shadow-lg shadow-fuchsia-900/20;
+  }
+  .btn-ghost {
+    @apply btn border border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08];
+  }
+  .btn-danger {
+    @apply btn border border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20;
+  }
+  .btn-sm {
+    @apply px-2.5 py-1 text-xs;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-white/10 bg-[#0e1420] px-3 py-2 text-sm text-slate-100
+           placeholder:text-slate-500 outline-none transition
+           focus:border-fuchsia-500/50 focus:ring-2 focus:ring-fuchsia-500/15;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-medium text-slate-400;
+  }
+  .hint {
+    @apply mt-1 text-[11px] leading-relaxed text-slate-500;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium;
+  }
+  .chip-ok {
+    @apply chip bg-emerald-500/[0.12] text-emerald-300;
+  }
+  .chip-warn {
+    @apply chip bg-amber-500/[0.12] text-amber-300;
+  }
+  .chip-err {
+    @apply chip bg-rose-500/[0.12] text-rose-300;
+  }
+  .chip-mute {
+    @apply chip bg-white/[0.06] text-slate-400;
+  }
+  .chip-info {
+    @apply chip bg-sky-500/[0.12] text-sky-300;
+  }
+
+  .th {
+    @apply px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .td {
+    @apply px-3 py-2.5 text-sm text-slate-300 align-top;
+  }
+  .row-hover {
+    @apply border-t border-white/[0.06] hover:bg-white/[0.02];
+  }
+}
+
+/* انیمیشن ظاهر شدن نرم برای تست‌ها و نوتیف‌ها */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: rise 0.18s ease-out;
+}

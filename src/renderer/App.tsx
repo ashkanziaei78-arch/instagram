@@ -90,7 +90,7 @@ export default function App(): JSX.Element {
       case 'logs':
         return <LogsPage accountId={activeId} />
       case 'settings':
-        return <SettingsPage />
+        return <SettingsPage hasGraphAccount={accounts.some((a) => a.engine === 'graph')} />
     }
   }
 

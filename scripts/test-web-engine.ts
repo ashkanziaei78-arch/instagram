@@ -105,9 +105,11 @@ async function run(): Promise<void> {
   engine.attach(1, SESSION)
 
   console.log('\n=== 2. هدرهای درخواست ===')
+  // از listFollowers استفاده می‌کنیم چون یک فراخوانی قطعی با آدرس مشخص دارد؛
+  // listMedia حالا زنجیره‌ای است و اولین آدرسش به کش نام کاربری بستگی دارد.
   captured = []
-  nextResponse = { status: 200, body: JSON.stringify({ items: [] }) }
-  await engine.listMedia(1, 5)
+  nextResponse = { status: 200, body: JSON.stringify({ users: [] }) }
+  await engine.listFollowers(1, 5)
   const h = captured[0].headers
   check('X-IG-App-ID فرستاده شد', h['X-IG-App-ID'] === '936619743392459', h['X-IG-App-ID'])
   check('کوکی‌ها در هدر هستند', (h.Cookie ?? '').includes('sessionid=SESSION_ABC'))
@@ -115,7 +117,7 @@ async function run(): Promise<void> {
   check('CSRF از کوکی برداشته شد', h['X-CSRFToken'] === 'CSRF_XYZ')
   check('User-Agent همان نشست است', h['User-Agent'] === SESSION.userAgent)
   check('Referer ست شده', h.Referer === 'https://www.instagram.com/')
-  check('آدرس درست است', captured[0].url.includes('/api/v1/feed/user/12345/'), captured[0].url)
+  check('آدرس درست است', captured[0].url.includes('/api/v1/friendships/12345/followers/'), captured[0].url)
 
   console.log('\n=== 3. نگاشت خطاها ===')
   const expectError = async (
@@ -125,7 +127,7 @@ async function run(): Promise<void> {
   ): Promise<void> => {
     nextResponse = resp
     try {
-      await engine.listMedia(1, 5)
+      await engine.listFollowers(1, 5)
       check(label, false, 'خطایی پرتاب نشد')
     } catch (e) {
       const isAuth = e instanceof AuthError
@@ -248,6 +250,95 @@ async function run(): Promise<void> {
     partial.length === 2,
     partial.length
   )
+
+  console.log('\n=== 7-ب. زنجیره‌ی دریافت پست‌ها ===')
+  // سناریوی واقعی کاربر: میزبان وب HTML می‌دهد ولی web_profile_info سالم است
+  responseQueue.length = 0
+  // فراخوانی اول: گرفتن نام کاربری (getProfile)
+  responseQueue.push({
+    status: 200,
+    body: JSON.stringify({ user: { pk: 12345, username: 'ashkan_test' } })
+  })
+  responseQueue.push({
+    status: 200,
+    body: JSON.stringify({
+      data: {
+        user: {
+          edge_owner_to_timeline_media: {
+            edges: [
+              {
+                node: {
+                  id: 'g1',
+                  shortcode: 'ABC',
+                  is_video: true,
+                  product_type: 'clips',
+                  taken_at_timestamp: 1700000000,
+                  edge_media_to_caption: { edges: [{ node: { text: 'کپشن ریلز' } }] },
+                  edge_liked_by: { count: 42 },
+                  edge_media_to_comment: { count: 7 },
+                  thumbnail_src: 'https://img/g1.jpg'
+                }
+              }
+            ]
+          }
+        }
+      }
+    })
+  })
+  captured = []
+  const chained = await engine.listMedia(1, 10)
+  check('web_profile_info پست‌ها را می‌دهد', chained.length === 1, chained.length)
+  check('ریلز از نود گراف تشخیص داده شد', chained[0].media_type === 'REELS', chained[0].media_type)
+  check('کپشن از edge_media_to_caption', chained[0].caption === 'کپشن ریلز')
+  check('لایک از edge_liked_by', chained[0].like_count === 42)
+  check('کامنت از edge_media_to_comment', chained[0].comments_count === 7)
+  check('لینک از shortcode', chained[0].permalink === 'https://www.instagram.com/p/ABC/')
+  check('آدرس web_profile_info صدا زده شد', captured.some((c) => c.url.includes('web_profile_info')))
+
+  console.log('\n=== 7-ج. سقوط به میزبان موبایل ===')
+  responseQueue.length = 0
+  responseQueue.push({ status: 200, body: JSON.stringify({ data: { user: {} } }) })
+  responseQueue.push({
+    status: 200,
+    body: JSON.stringify({ items: [{ pk: 'm9', media_type: 1, taken_at: 1700000500 }] })
+  })
+  captured = []
+  const viaMobile = await engine.listMedia(1, 10)
+  check('وقتی web_profile_info خالی است، میزبان موبایل امتحان می‌شود', viaMobile.length === 1, viaMobile.length)
+  check(
+    'آدرس i.instagram استفاده شد',
+    captured.some((c) => c.url.includes('i.instagram.com')),
+    captured.map((c) => c.url)
+  )
+
+  console.log('\n=== 7-د. خطاها در زنجیره ===')
+  responseQueue.length = 0
+  nextResponse = { status: 200, body: '<!DOCTYPE html><html></html>' }
+  try {
+    await engine.listMedia(1, 10)
+    check('خطای جامع پرتاب می‌شود', false)
+  } catch (e) {
+    const msg = (e as Error).message
+    check('خطا همه‌ی تلاش‌ها را فهرست می‌کند', msg.includes('•'), msg.slice(0, 70))
+  }
+
+  responseQueue.length = 0
+  nextResponse = { status: 401, body: '{}' }
+  try {
+    await engine.listMedia(1, 10)
+    check('نشست باطل فورا پرتاب می‌شود نه بعد از امتحان همه', false)
+  } catch (e) {
+    check('نشست باطل فورا پرتاب می‌شود نه بعد از امتحان همه', e instanceof AuthError, (e as Error).name)
+  }
+
+  responseQueue.length = 0
+  nextResponse = { status: 429, body: '{}' }
+  try {
+    await engine.listMedia(1, 10)
+    check('محدودیت نرخ در زنجیره بلعیده نمی‌شود', false)
+  } catch (e) {
+    check('محدودیت نرخ در زنجیره بلعیده نمی‌شود', e instanceof RateLimitError, (e as Error).name)
+  }
 
   console.log('\n=== 8. ارسال دایرکت ===')
   captured = []

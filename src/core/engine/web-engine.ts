@@ -63,6 +63,8 @@ export class WebEngine implements IEngine {
   ]
 
   private sessions = new Map<number, WebSessionData>()
+  /** کش نام کاربری — برای اندپوینت‌هایی که با نام کار می‌کنند نه شناسه */
+  private usernames = new Map<number, string>()
 
   constructor(private readonly store: WebSessionStore) {}
 
@@ -360,14 +362,9 @@ export class WebEngine implements IEngine {
 
   /* ─────────────────────────── مدیا ─────────────────────────── */
 
-  async listMedia(accountId: number, limit = 25): Promise<IgMedia[]> {
-    const d = await this.request<{ items?: Record<string, any>[] }>(
-      accountId,
-      '/api/v1/feed/user/' + this.pk(accountId) + '/',
-      { query: { count: String(Math.min(limit, 50)) }, context: 'دریافت پست‌ها' }
-    )
-
-    return (d.items ?? []).slice(0, limit).map((m) => ({
+  /** تبدیل آیتم فید موبایل به شکل مشترک */
+  private mapFeedItem(m: Record<string, any>): IgMedia {
+    return {
       media_id: String(m.pk ?? m.id),
       media_type:
         m.media_type === 2
@@ -383,7 +380,112 @@ export class WebEngine implements IEngine {
       timestamp: (m.taken_at ?? 0) * 1000,
       like_count: m.like_count ?? 0,
       comments_count: m.comment_count ?? 0
-    }))
+    }
+  }
+
+  /** تبدیل نود گراف‌کیوال (شکل web_profile_info) به شکل مشترک */
+  private mapGraphNode(n: Record<string, any>): IgMedia {
+    const isVideo = !!n.is_video
+    return {
+      media_id: String(n.id ?? n.pk),
+      media_type:
+        n.__typename === 'GraphSidecar' || n.edge_sidecar_to_children
+          ? 'CAROUSEL_ALBUM'
+          : isVideo
+            ? n.product_type === 'clips'
+              ? 'REELS'
+              : 'VIDEO'
+            : 'IMAGE',
+      caption: n.edge_media_to_caption?.edges?.[0]?.node?.text,
+      permalink: n.shortcode ? 'https://www.instagram.com/p/' + n.shortcode + '/' : undefined,
+      thumbnail_url: n.thumbnail_src ?? n.display_url,
+      timestamp: (n.taken_at_timestamp ?? 0) * 1000,
+      like_count: n.edge_liked_by?.count ?? n.edge_media_preview_like?.count ?? 0,
+      comments_count: n.edge_media_to_comment?.count ?? 0
+    }
+  }
+
+  /**
+   * فهرست پست‌ها.
+   *
+   * چرا زنجیره‌ای: آدرس «/api/v1/feed/user/{id}/» روی میزبان وب وجود ندارد و
+   * اینستاگرام به‌جای داده، صفحه‌ی HTML برمی‌گرداند — دقیقا خطایی که کاربر دید
+   * («به‌جای داده، صفحه‌ی وب برگشت») در حالی که همگام‌سازی فالوورها سالم بود.
+   * مسیر مطمئن برای وب، web_profile_info است که پست‌ها را داخل
+   * edge_owner_to_timeline_media می‌دهد.
+   */
+  async listMedia(accountId: number, limit = 25): Promise<IgMedia[]> {
+    const pk = this.pk(accountId)
+    const failures: string[] = []
+
+    const attempt = async (label: string, fn: () => Promise<IgMedia[]>): Promise<IgMedia[] | null> => {
+      try {
+        const items = await fn()
+        if (items.length > 0) return items
+        // پاسخ درست ولی خالی: حساب واقعا پستی ندارد — این شکست نیست
+        failures.push(label + ': پستی برنگرداند')
+        return items
+      } catch (e) {
+        // نشست باطل یا محدودیت نرخ ربطی به *آدرس* ندارد — امتحان آدرس بعدی
+        // نه کمکی می‌کند و نه بی‌هزینه است. مهم‌تر: اگر این‌ها را ببلعیم، کاربر
+        // به‌جای «دوباره وارد شوید» یک خطای مبهم درباره‌ی آدرس‌ها می‌بیند و صف
+        // هم بی‌خود دوباره تلاش می‌کند.
+        if (e instanceof AuthError || e instanceof RateLimitError) throw e
+        failures.push(label + ': ' + (e as Error).message.slice(0, 110))
+        return null
+      }
+    }
+
+    // ۱) web_profile_info — مسیر اصلی وب. نام کاربری لازم دارد.
+    const username = await this.username(accountId).catch(() => null)
+    if (username) {
+      const r = await attempt('web_profile_info', async () => {
+        const d = await this.request<{
+          data?: { user?: { edge_owner_to_timeline_media?: { edges?: { node: Record<string, any> }[] } } }
+        }>(accountId, '/api/v1/users/web_profile_info/', {
+          query: { username },
+          context: 'دریافت پست‌ها'
+        })
+        const edges = d.data?.user?.edge_owner_to_timeline_media?.edges ?? []
+        return edges.slice(0, limit).map((e) => this.mapGraphNode(e.node))
+      })
+      if (r && r.length > 0) return r
+    }
+
+    // ۲) میزبان موبایل — همان کوکی، آدرسی که آنجا واقعا وجود دارد
+    const r2 = await attempt('feed/user (i.instagram)', async () => {
+      const d = await this.request<{ items?: Record<string, any>[] }>(
+        accountId,
+        'https://i.instagram.com/api/v1/feed/user/' + pk + '/',
+        { query: { count: String(Math.min(limit, 50)) }, context: 'دریافت پست‌ها' }
+      )
+      return (d.items ?? []).slice(0, limit).map((m) => this.mapFeedItem(m))
+    })
+    if (r2 && r2.length > 0) return r2
+
+    // ۳) میزبان وب — برای کامل‌بودن؛ معمولا HTML می‌دهد ولی رایگان است
+    const r3 = await attempt('feed/user (web)', async () => {
+      const d = await this.request<{ items?: Record<string, any>[] }>(
+        accountId,
+        '/api/v1/feed/user/' + pk + '/',
+        { query: { count: String(Math.min(limit, 50)) }, context: 'دریافت پست‌ها' }
+      )
+      return (d.items ?? []).slice(0, limit).map((m) => this.mapFeedItem(m))
+    })
+    if (r3) return r3
+
+    throw new Error(
+      'دریافت پست‌ها با هیچ‌کدام از آدرس‌ها ممکن نشد:\n• ' + failures.join('\n• ')
+    )
+  }
+
+  /** نام کاربری حساب (برای اندپوینت‌هایی که با نام کار می‌کنند) */
+  private async username(accountId: number): Promise<string> {
+    const cached = this.usernames.get(accountId)
+    if (cached) return cached
+    const p = await this.getProfile(accountId)
+    this.usernames.set(accountId, p.username)
+    return p.username
   }
 
   /**
@@ -421,20 +523,36 @@ export class WebEngine implements IEngine {
   /* ─────────────────────────── کامنت‌ها ─────────────────────────── */
 
   async listComments(accountId: number, mediaId: string, limit = 50): Promise<IgComment[]> {
-    const d = await this.request<{ comments?: Record<string, any>[] }>(
-      accountId,
-      '/api/v1/media/' + mediaId + '/comments/',
-      { query: { can_support_threading: 'true', permalink_enabled: 'false' }, context: 'دریافت کامنت‌ها' }
-    )
-
-    return (d.comments ?? []).slice(0, limit).map((c) => ({
+    const toComment = (c: Record<string, any>): IgComment => ({
       comment_id: String(c.pk),
       media_id: mediaId,
       text: c.text ?? '',
       from_user_id: String(c.user?.pk ?? ''),
       from_username: c.user?.username,
       timestamp: (c.created_at ?? 0) * 1000
-    }))
+    })
+
+    const query = { can_support_threading: 'true', permalink_enabled: 'false' }
+
+    // همان مشکل فهرست پست‌ها: بعضی آدرس‌ها فقط روی میزبان موبایل وجود دارند
+    try {
+      const d = await this.request<{ comments?: Record<string, any>[] }>(
+        accountId,
+        '/api/v1/media/' + mediaId + '/comments/',
+        { query, context: 'دریافت کامنت‌ها' }
+      )
+      if (Array.isArray(d.comments)) return d.comments.slice(0, limit).map(toComment)
+    } catch (e) {
+      // اگر نشست باطل است، امتحان میزبان دوم بی‌فایده است
+      if (e instanceof AuthError) throw e
+    }
+
+    const d2 = await this.request<{ comments?: Record<string, any>[] }>(
+      accountId,
+      'https://i.instagram.com/api/v1/media/' + mediaId + '/comments/',
+      { query, context: 'دریافت کامنت‌ها' }
+    )
+    return (d2.comments ?? []).slice(0, limit).map(toComment)
   }
 
   /**

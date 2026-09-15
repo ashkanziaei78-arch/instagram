@@ -4,7 +4,7 @@ import type { MetaAppConfig } from '../../shared/ipc'
 import { Card, Field, Notice, Spinner, Toggle } from '../components/ui'
 import { call, toasts } from '../lib/api'
 
-export function SettingsPage(): JSX.Element {
+export function SettingsPage({ hasGraphAccount }: { hasGraphAccount: boolean }): JSX.Element {
   const [safety, setSafety] = useState<SafetySettings | null>(null)
   const [meta, setMeta] = useState<MetaAppConfig>({})
   const [session, setSession] = useState({ enabled: false, libraryAvailable: false })
@@ -259,13 +259,18 @@ export function SettingsPage(): JSX.Element {
           />
           <Toggle
             checked={webhookOn}
+            disabled={!hasGraphAccount}
             onChange={(v) => void toggleWebhook(v)}
             label="وبهوک (واکنش لحظه‌ای)"
-            hint="کامنت‌ها را در همان ثانیه دریافت می‌کند، اما به یک آدرس عمومی HTTPS نیاز دارد"
+            hint={
+              hasGraphAccount
+                ? 'کامنت‌ها را در همان ثانیه دریافت می‌کند، اما به یک آدرس عمومی HTTPS نیاز دارد'
+                : 'برای حساب شما کاری نمی‌کند — رویدادهای وبهوک را سرورهای متا می‌فرستند و این فقط با اتصال «API رسمی» معنا دارد'
+            }
           />
         </div>
 
-        <div className="mt-3">
+        <div className="mt-3" hidden={!hasGraphAccount}>
           <Field
             label="پورت وبهوک"
             hint="اگر پورت اشغال بود، عدد دیگری بگذارید"
@@ -282,15 +287,27 @@ export function SettingsPage(): JSX.Element {
           </Field>
         </div>
 
+        {!hasGraphAccount ? (
+          <Notice tone="success" title="وبهوک را لازم ندارید — رد شوید">
+            وبهوک یعنی «سرورهای متا به کامپیوتر شما خبر بدهند». اما متا فقط برای اپ‌هایی خبر
+            می‌فرستد که در داشبورد خودش ثبت شده‌اند. حساب شما با <strong>ورود ساده</strong> وصل است،
+            نه با API رسمی — پس متا اصلا نمی‌داند این اپ وجود دارد و این کلید هیچ کاری نمی‌کند.
+            <br />
+            <br />
+            <strong>همه‌چیز همین الان کار می‌کند:</strong> نظرسنجی دوره‌ای (کلید بالا، که روشن است)
+            هر ۳ دقیقه کامنت‌ها را می‌خواند. تنها تفاوتش با وبهوک، چند دقیقه تأخیر است.
+          </Notice>
+        ) : (
         <Notice tone="info" title="برای وبهوک به آدرس عمومی نیاز دارید">
           ساده‌ترین راه، یک تونل است. در ترمینال اجرا کنید:
           <code className="mt-1.5 block rounded bg-black/40 px-2 py-1.5 text-[11px]" dir="ltr">
             cloudflared tunnel --url http://localhost:{webhookPort}
           </code>
-          آدرس https که می‌دهد را با مسیر <code>/webhook</code> در داشبورد متا به‌عنوان Callback URL
-          ثبت کنید. اگر این کار برایتان سخت است، فقط نظرسنجی دوره‌ای را روشن بگذارید — همه‌چیز کار
-          می‌کند، فقط چند دقیقه تأخیر دارد.
-        </Notice>
+            آدرس https که می‌دهد را با مسیر <code>/webhook</code> در داشبورد متا به‌عنوان Callback
+            URL ثبت کنید. اگر این کار برایتان سخت است، فقط نظرسنجی دوره‌ای را روشن بگذارید —
+            همه‌چیز کار می‌کند، فقط چند دقیقه تأخیر دارد.
+          </Notice>
+        )}
       </Card>
 
       {/* ═══════ موتور پیشرفته ═══════ */}

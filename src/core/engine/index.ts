@@ -2,11 +2,13 @@ import type { Capability, EngineKind, EngineStatus } from '../../shared/types'
 import { contactsRepo, settingsRepo } from '../db/repos'
 import { GraphEngine, type TokenProvider } from './graph-engine'
 import { SessionEngine, type SessionStore } from './session-engine'
+import { WebEngine, type WebSessionStore } from './web-engine'
 import { UnsupportedCapabilityError, type IEngine } from './types'
 
 export interface EngineManagerOptions {
   tokenProvider: TokenProvider
   sessionStore: SessionStore
+  webSessionStore: WebSessionStore
 }
 
 /**
@@ -19,10 +21,24 @@ export interface EngineManagerOptions {
 export class EngineManager {
   readonly graph: GraphEngine
   readonly session: SessionEngine
+  readonly web: WebEngine
 
   constructor(opts: EngineManagerOptions) {
     this.graph = new GraphEngine(opts.tokenProvider)
     this.session = new SessionEngine(opts.sessionStore)
+    this.web = new WebEngine(opts.webSessionStore)
+  }
+
+  /**
+   * موتورهای غیررسمی به ترتیب ترجیح.
+   *
+   * چرا موتور وب اول است: مسیر نام‌کاربری/رمز به کتابخانه‌ی
+   * instagram-private-api تکیه دارد که نسخه‌ی اپ موبایلِ منقضی اعلام می‌کند و
+   * اینستاگرام با «Your version of Instagram is out of date» ردش می‌کند.
+   * موتور وب همان درخواست‌های مرورگر را می‌زند و چنین چکی ندارد.
+   */
+  private unofficialEngines(): IEngine[] {
+    return [this.web, this.session]
   }
 
   /** آیا کاربر موتور Session را آگاهانه روشن کرده؟ پیش‌فرض: خیر */
@@ -42,22 +58,24 @@ export class EngineManager {
   pick(accountId: number, cap: Capability): IEngine {
     if (this.graph.can(cap) && this.graph.isConnected(accountId)) return this.graph
 
-    if (this.session.can(cap)) {
+    const candidates = this.unofficialEngines().filter((e) => e.can(cap))
+    if (candidates.length > 0) {
       if (!this.sessionEnabled) {
         throw new UnsupportedCapabilityError(
           cap,
           'graph',
-          'این قابلیت در API رسمی وجود ندارد و موتور Session خاموش است. از تنظیمات > موتور پیشرفته روشنش کنید (ریسک‌ها را بخوانید).'
+          'این قابلیت در API رسمی وجود ندارد. با دکمه‌ی «ورود ساده با اینستاگرام» در صفحه‌ی حساب‌ها وصل شوید.'
         )
       }
-      if (!this.session.isConnected(accountId)) {
+      const connected = candidates.find((e) => e.isConnected(accountId))
+      if (!connected) {
         throw new UnsupportedCapabilityError(
           cap,
           'session',
-          'موتور Session روشن است ولی این حساب با آن وصل نشده. از صفحه‌ی حساب‌ها با نام کاربری و رمز وصل شوید.'
+          'این حساب با روش ساده وصل نشده. از صفحه‌ی حساب‌ها دکمه‌ی «ورود ساده با اینستاگرام» را بزنید.'
         )
       }
-      return this.session
+      return connected
     }
 
     if (this.graph.can(cap)) {
@@ -116,11 +134,12 @@ export class EngineManager {
     return { via: engine.kind, method: 'dm' }
   }
 
-  /** وضعیت هر دو موتور برای نمایش در UI */
+  /** وضعیت موتورها برای نمایش در UI */
   status(accountId: number): EngineStatus[] {
     const graphConnected = this.graph.isConnected(accountId)
-    const sessionAvailable = SessionEngine.isAvailable()
-    const sessionConnected = this.sessionEnabled && this.session.isConnected(accountId)
+    const webConnected = this.web.isConnected(accountId)
+    const sessionConnected = this.session.isConnected(accountId)
+    const simpleConnected = this.sessionEnabled && (webConnected || sessionConnected)
 
     return [
       {
@@ -128,20 +147,19 @@ export class EngineManager {
         connected: graphConnected,
         capabilities: this.graph.capabilities,
         detail: graphConnected
-          ? 'وصل است — کامنت به دایرکت و آنالیتیکس کامل کار می‌کند'
-          : 'وصل نیست — از صفحه‌ی حساب‌ها با اینستاگرام وارد شوید'
+          ? 'وصل است — کامنت به دایرکت و آمار دقیق (ویو، ریچ، سیو) کار می‌کند'
+          : 'وصل نیست — برای آمار دقیق و پاسخ خصوصی به کامنت لازم است'
       },
       {
         kind: 'session',
-        connected: sessionConnected,
-        capabilities: this.session.capabilities,
-        detail: !sessionAvailable
-          ? 'کتابخانه‌ی instagram-private-api نصب نیست'
-          : !this.sessionEnabled
-            ? 'خاموش است (پیش‌فرض) — برای لیست فالوور و دایرکت انبوه لازم است'
-            : sessionConnected
-              ? 'وصل است — لیست فالوور، فالوور جدید و دایرکت انبوه فعال'
-              : 'روشن است ولی این حساب وارد نشده'
+        connected: simpleConnected,
+        capabilities: this.web.capabilities,
+        detail: !this.sessionEnabled
+          ? 'وصل نیست — با «ورود ساده با اینستاگرام» وصل شوید'
+          : simpleConnected
+            ? (webConnected ? 'وصل است (ورود ساده)' : 'وصل است (نام کاربری و رمز)') +
+              ' — لیست فالوور، فالوور جدید و دایرکت انبوه فعال'
+            : 'روشن است ولی این حساب وارد نشده'
       }
     ]
   }
@@ -162,5 +180,7 @@ export function engines(): EngineManager {
 export * from './types'
 export { GraphEngine } from './graph-engine'
 export { SessionEngine } from './session-engine'
+export { WebEngine } from './web-engine'
+export type { WebSessionStore, WebSessionData } from './web-engine'
 export type { SessionStore, LoginChallenge } from './session-engine'
 export type { TokenProvider } from './graph-engine'

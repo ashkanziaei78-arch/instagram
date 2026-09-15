@@ -7,11 +7,13 @@ interface VaultShape {
   tokens: Record<string, { value: string; expiresAt: number | null }>
   /** نشست‌های موتور Session (سریال‌شده‌ی instagram-private-api) */
   sessions: Record<string, string>
+  /** نشست‌های موتور وب (کوکی‌های ورود ساده) */
+  webSessions: Record<string, string>
   /** تنظیمات اپ متا */
   metaApp: { appId?: string; appSecret?: string; redirectUri?: string; webhookVerifyToken?: string }
 }
 
-const EMPTY: VaultShape = { tokens: {}, sessions: {}, metaApp: {} }
+const EMPTY: VaultShape = { tokens: {}, sessions: {}, webSessions: {}, metaApp: {} }
 
 /**
  * انبار رمزنگاری‌شده‌ی اعتبارنامه‌ها.
@@ -107,6 +109,24 @@ class SecureStore {
   clearSession(accountId: number): void {
     const v = this.read()
     delete v.sessions[String(accountId)]
+    this.write()
+  }
+
+  /* ─────────── نشست موتور وب (ورود ساده) ─────────── */
+
+  getWebSession(accountId: number): string | null {
+    return this.read().webSessions[String(accountId)] ?? null
+  }
+
+  setWebSession(accountId: number, serialized: string): void {
+    const v = this.read()
+    v.webSessions[String(accountId)] = serialized
+    this.write()
+  }
+
+  clearWebSession(accountId: number): void {
+    const v = this.read()
+    delete v.webSessions[String(accountId)]
     this.write()
   }
 

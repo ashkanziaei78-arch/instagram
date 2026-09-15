@@ -66,6 +66,10 @@ export interface IpcApi {
   /* حساب‌ها */
   listAccounts(): Promise<ApiResult<AccountRow[]>>
   connectGraphAccount(): Promise<ApiResult<AccountRow>>
+  /** ورود ساده: پنجره‌ی خود اینستاگرام باز می‌شود و کوکی نشست برداشته می‌شود */
+  webLogin(): Promise<ApiResult<AccountRow>>
+  /** پاک‌کردن نشست مرورگر داخلی، برای وصل‌کردن حساب دیگر */
+  clearWebLogin(): Promise<ApiResult>
   sessionLogin(p: { username: string; password: string }): Promise<
     ApiResult<{ status: 'connected' | 'two_factor' | 'checkpoint'; message: string; account?: AccountRow }>
   >
@@ -136,6 +140,8 @@ export type IpcChannel = keyof IpcApi
 export const IPC_CHANNELS: IpcChannel[] = [
   'listAccounts',
   'connectGraphAccount',
+  'webLogin',
+  'clearWebLogin',
   'sessionLogin',
   'sessionTwoFactor',
   'removeAccount',

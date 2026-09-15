@@ -27,6 +27,7 @@ import {
 import { pollFollowers, pollMedia, pollerScheduler, syncFollowing } from '../core/pollers'
 import { IPC_CHANNELS, type ApiResult, type IpcApi } from '../shared/ipc'
 import { connectInstagramAccount, refreshLongLivedToken, TOKEN_REFRESH_THRESHOLD_MS } from './auth/oauth'
+import { clearWebLoginSession, loginWithInstagramWindow } from './auth/web-login'
 import { secureStore } from './secure-store'
 import { startWebhookFromSettings, webhookServer } from './webhook-server'
 
@@ -79,6 +80,63 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       return ok(account)
     },
 
+    /**
+     * ورود ساده — مسیر پیش‌فرض برای کاربر عادی.
+     *
+     * برخلاف مسیر API رسمی، اینجا هیچ تنظیم قبلی لازم نیست: نه اپ متا، نه
+     * App Secret، نه Redirect URI. کاربر فقط در پنجره‌ی خود اینستاگرام وارد
+     * می‌شود. موتور Session اگر خاموش باشد خودکار روشن می‌شود، چون کاربر با
+     * زدن این دکمه و تأیید هشدارِ کنارش، عملاً همین را خواسته است.
+     */
+    webLogin: async () => {
+      const { cookies, userAgent } = await loginWithInstagramWindow(getWindow() ?? undefined)
+      const sessionData = { cookies: cookies as Record<string, string>, userAgent }
+
+      // نشست را *قبل* از ذخیره تأیید می‌کنیم. اگر این کار را نمی‌کردیم، اتصال
+      // «موفق» اعلام می‌شد و کاربر ساعت‌ها بعد، سر اولین دایرکت، با خطای مبهم
+      // می‌فهمید که وصل نشده.
+      const profile = await engines().web.verifyAndGetProfile(sessionData)
+
+      if (!engines().sessionEnabled) {
+        engines().setSessionEnabled(true)
+        logRepo.add({
+          level: 'warn',
+          category: 'settings',
+          message: 'قابلیت‌های غیررسمی با «ورود ساده» خودکار فعال شدند'
+        })
+      }
+
+      const account = accountsRepo.upsert({
+        ig_user_id: profile.ig_user_id,
+        username: profile.username,
+        name: profile.name ?? null,
+        profile_picture_url: profile.profile_picture_url ?? null,
+        engine: 'session',
+        followers_count: profile.followers_count ?? 0,
+        follows_count: profile.follows_count ?? 0,
+        media_count: profile.media_count ?? 0
+      })
+      engines().web.attach(account.id, sessionData)
+      accountsRepo.snapshot(
+        account.id,
+        profile.followers_count ?? 0,
+        profile.follows_count ?? 0,
+        profile.media_count ?? 0
+      )
+      logRepo.add({
+        account_id: account.id,
+        level: 'success',
+        category: 'auth',
+        message: 'حساب @' + profile.username + ' با ورود ساده وصل شد'
+      })
+      return ok(account)
+    },
+
+    clearWebLogin: async () => {
+      await clearWebLoginSession()
+      return ok()
+    },
+
     sessionLogin: async (p: { username: string; password: string }) => {
       if (!engines().sessionEnabled) {
         return fail(
@@ -126,7 +184,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     removeAccount: (p: { accountId: number }) => {
       secureStore().clearToken(p.accountId)
       secureStore().clearSession(p.accountId)
+      secureStore().clearWebSession(p.accountId)
       engines().session.logout(p.accountId)
+      engines().web.detach(p.accountId)
       accountsRepo.remove(p.accountId)
       return ok()
     },

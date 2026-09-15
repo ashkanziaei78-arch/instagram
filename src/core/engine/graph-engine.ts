@@ -291,7 +291,10 @@ export class GraphEngine implements IEngine {
     }))
   }
 
-  async replyToCommentPublic(accountId: number, commentId: string, text: string): Promise<void> {
+  async replyToCommentPublic(accountId: number, commentRef: string, text: string): Promise<void> {
+    // فرمت مشترک «mediaId:commentId» است چون موتور وب هر دو را لازم دارد؛
+    // API رسمی فقط شناسه‌ی کامنت را می‌خواهد، پس پیشوند را دور می‌ریزیم.
+    const commentId = commentRef.includes(':') ? commentRef.split(':')[1] : commentRef
     await this.request(accountId, '/' + commentId + '/replies', {
       method: 'POST',
       query: { message: text },

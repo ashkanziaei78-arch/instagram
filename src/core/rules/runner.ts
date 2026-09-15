@@ -84,7 +84,10 @@ export function enqueueRuleActions(rule: Rule, ctx: TriggerContext): number {
           run_at: Date.now() + cumulativeDelay,
           dedupe_key: dedupeKey(rule, ctx, action),
           payload: {
-            commentId: ctx.commentId,
+            // شناسه‌ی پست را هم می‌فرستیم: موتور وب برای پاسخ به کامنت هر دو را
+            // لازم دارد، موتور رسمی فقط شناسه‌ی کامنت را. فرمت «mediaId:commentId»
+            // هر دو را راضی می‌کند و هر موتور خودش آنچه نیاز دارد را برمی‌دارد.
+            commentId: ctx.mediaId ? ctx.mediaId + ':' + ctx.commentId : ctx.commentId,
             text: buildMessage(action.text, vars),
             ruleId: rule.id
           }

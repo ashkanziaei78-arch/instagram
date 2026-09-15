@@ -280,6 +280,78 @@ export class SessionEngine implements IEngine {
     this.clients.delete(accountId) // دفعه‌ی بعد از نشست تازه ساخته می‌شود
   }
 
+  /**
+   * ساخت نشست از روی کوکی‌هایی که کاربر با ورود در پنجره‌ی خود اینستاگرام
+   * تولید کرده — مسیر «ورود ساده».
+   *
+   * چطور کار می‌کند: به‌جای اینکه ما لاگین کنیم، کوکی sessionid آماده را در
+   * cookie jar کلاینت می‌ریزیم. از آنجا به بعد کلاینت دقیقاً مثل حالت لاگین
+   * عادی رفتار می‌کند.
+   *
+   * نکته‌ی مهم: بلافاصله یک فراخوانی واقعی به اینستاگرام می‌زنیم تا نشست را
+   * *تأیید* کنیم. اگر این کار را نمی‌کردیم، ورود «موفق» اعلام می‌شد و بعداً
+   * اولین دایرکت با خطای مبهم شکست می‌خورد — یعنی کاربر ساعت‌ها بعد و در بدترین
+   * لحظه می‌فهمید که وصل نشده.
+   */
+  async loginWithCookies(cookies: Record<string, string | undefined>): Promise<{
+    profile: IgProfile
+    serialized: string
+  }> {
+    const sessionid = cookies.sessionid
+    const dsUserId = cookies.ds_user_id
+    if (!sessionid || !dsUserId) {
+      throw new AuthError('کوکی نشست ناقص است — دوباره وارد شوید')
+    }
+
+    const { IgApiClient } = this.loadLib()
+    const ig = new IgApiClient()
+    // دستگاه را از شناسه‌ی کاربر می‌سازیم تا برای یک حساب همیشه ثابت بماند؛
+    // دستگاه متغیر، خودش سیگنال مشکوکی برای اینستاگرام است
+    ig.state.generateDevice(dsUserId)
+
+    for (const [name, value] of Object.entries(cookies)) {
+      if (!value) continue
+      try {
+        ig.state.cookieJar.setCookie(
+          name + '=' + value + '; Domain=.instagram.com; Path=/; Secure; HttpOnly',
+          'https://www.instagram.com/'
+        )
+      } catch {
+        // کوکی‌های فرعی (shbid, rur, …) اگر ست نشدند مهم نیست
+      }
+    }
+
+    // تأیید واقعی: اگر نشست نامعتبر باشد، همین‌جا خطا می‌گیریم نه دو ساعت بعد
+    let info: Record<string, any>
+    try {
+      info = await ig.user.info(dsUserId)
+    } catch (e) {
+      throw this.mapError(e, 'تأیید نشست ورود')
+    }
+
+    if (!info || !info.username) {
+      throw new AuthError(
+        'نشست ساخته شد ولی اینستاگرام اطلاعات حساب را برنگرداند — دوباره وارد شوید'
+      )
+    }
+
+    const state = await ig.state.serialize()
+    delete state.constants
+
+    return {
+      profile: {
+        ig_user_id: String(info.pk ?? dsUserId),
+        username: info.username,
+        name: info.full_name,
+        profile_picture_url: info.profile_pic_url,
+        followers_count: info.follower_count,
+        follows_count: info.following_count,
+        media_count: info.media_count
+      },
+      serialized: JSON.stringify(state)
+    }
+  }
+
   logout(accountId: number): void {
     this.clients.delete(accountId)
     this.pks.delete(accountId)
@@ -380,7 +452,8 @@ export class SessionEngine implements IEngine {
     }
   }
 
-  async replyToCommentPublic(accountId: number, commentId: string, text: string): Promise<void> {
+  async replyToCommentPublic(accountId: number, commentRef: string, text: string): Promise<void> {
+    const commentId = commentRef.includes(':') ? commentRef.split(':')[1] : commentRef
     const ig = await this.restore(accountId)
     try {
       // در API خصوصی، پاسخ به کامنت یعنی کامنت جدید با replied_to_comment_id

@@ -11,8 +11,25 @@ export function AccountsPage({
   onChanged: () => void
 }): JSX.Element {
   const [connecting, setConnecting] = useState(false)
+  const [webBusy, setWebBusy] = useState(false)
   const [sessionModal, setSessionModal] = useState(false)
   const [sessionAvailable, setSessionAvailable] = useState({ enabled: false, libraryAvailable: false })
+
+  /**
+   * ورود ساده. هیچ تنظیم قبلی لازم نیست — پنجره‌ی خود اینستاگرام باز می‌شود.
+   * کاربر آنجا وارد می‌شود و ما فقط کوکی نشست را برمی‌داریم.
+   */
+  const connectWeb = async (): Promise<void> => {
+    setWebBusy(true)
+    const res = await callRaw('webLogin')
+    setWebBusy(false)
+    if (res.ok) {
+      toasts.push('success', 'حساب با موفقیت وصل شد')
+      onChanged()
+    } else {
+      toasts.push('error', res.error ?? 'اتصال ناموفق بود', res.hint)
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -55,11 +72,11 @@ export function AccountsPage({
         subtitle="می‌توانید چند حساب داشته باشید؛ قوانین و آمار هر حساب جداست"
         action={
           <div className="flex gap-2">
-            <button className="btn-primary btn-sm" disabled={connecting} onClick={() => void connectGraph()}>
-              {connecting ? 'در حال اتصال…' : '+ اتصال با API رسمی'}
+            <button className="btn-primary btn-sm" disabled={webBusy} onClick={() => void connectWeb()}>
+              {webBusy ? 'در انتظار ورود…' : '+ ورود ساده با اینستاگرام'}
             </button>
-            <button className="btn-ghost btn-sm" onClick={() => setSessionModal(true)}>
-              + اتصال با نام کاربری
+            <button className="btn-ghost btn-sm" disabled={connecting} onClick={() => void connectGraph()}>
+              {connecting ? 'در حال اتصال…' : '+ API رسمی'}
             </button>
           </div>
         }
@@ -68,7 +85,7 @@ export function AccountsPage({
           <EmptyState
             icon="◎"
             title="هیچ حسابی وصل نیست"
-            body="برای «کامنت به دایرکت» و آنالیتیکس، اتصال با API رسمی کافی و بی‌ریسک است. اتصال با نام کاربری فقط وقتی لازم است که لیست فالوور یا دایرکت انبوه می‌خواهید."
+            body="ساده‌ترین راه: دکمه‌ی «ورود ساده با اینستاگرام». پنجره‌ی خود اینستاگرام باز می‌شود، وارد می‌شوید، تمام. هیچ تنظیم دیگری لازم نیست."
           />
         ) : (
           <div className="space-y-3">
@@ -125,38 +142,87 @@ export function AccountsPage({
         )}
       </Card>
 
-      <Card title="کدام روش اتصال؟" subtitle="تفاوت‌ها را قبل از انتخاب بدانید">
+      <Card title="کدام روش اتصال؟" subtitle="می‌توانید هر دو را هم‌زمان وصل کنید — اپ برای هر کار بهترین را انتخاب می‌کند">
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3.5">
-            <p className="mb-2 text-sm font-semibold text-emerald-200">API رسمی — توصیه‌شده</p>
+          <div className="rounded-lg border border-fuchsia-500/25 bg-fuchsia-500/[0.05] p-3.5">
+            <div className="mb-2 flex items-center gap-2">
+              <p className="text-sm font-semibold text-fuchsia-200">ورود ساده با اینستاگرام</p>
+              <span className="chip-info">ساده‌ترین</span>
+            </div>
             <ul className="space-y-1 text-[11px] leading-relaxed text-slate-300">
-              <li>✓ بدون ریسک محدود شدن حساب</li>
-              <li>✓ کامنت به دایرکت (پاسخ خصوصی) کامل کار می‌کند</li>
-              <li>✓ آمار دقیق: ویو، ریچ، سیو، اشتراک‌گذاری</li>
-              <li>✓ رمز حساب لازم نیست</li>
-              <li>✕ لیست فالوورها را نمی‌دهد</li>
-              <li>✕ دایرکت انبوه ممکن نیست</li>
+              <li>✓ هیچ تنظیمی لازم نیست — فقط یک کلیک</li>
+              <li>✓ رمز شما وارد این اپ نمی‌شود</li>
+              <li>✓ دو مرحله‌ای را خود اینستاگرام مدیریت می‌کند</li>
+              <li>✓ لیست فالوور، فالوور جدید و دایرکت انبوه</li>
+              <li>✓ حساب لازم نیست بیزنسی باشد</li>
+              <li>✕ رسمی نیست — ریسک محدود شدن حساب دارد</li>
+              <li>✕ آمار ریچ و سیو نمی‌دهد</li>
             </ul>
             <p className="mt-2 text-[11px] text-slate-500">
-              نیازمند: حساب بیزنسی/کریتور + یک اپ در داشبورد متا (راهنما در تنظیمات)
+              پنجره‌ی خود اینستاگرام باز می‌شود، دقیقاً مثل ورود در مرورگر.
             </p>
           </div>
 
-          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3.5">
-            <p className="mb-2 text-sm font-semibold text-amber-200">نام کاربری و رمز (Session)</p>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3.5">
+            <div className="mb-2 flex items-center gap-2">
+              <p className="text-sm font-semibold text-emerald-200">API رسمی</p>
+              <span className="chip-ok">بی‌ریسک</span>
+            </div>
             <ul className="space-y-1 text-[11px] leading-relaxed text-slate-300">
-              <li>✓ لیست کامل فالوور و فالووینگ</li>
-              <li>✓ تشخیص فالوور جدید و پیام خوشامد</li>
-              <li>✓ دایرکت انبوه هنگام پست جدید</li>
-              <li>✕ نقض شرایط استفاده‌ی اینستاگرام</li>
-              <li>✕ احتمال محدود شدن موقت حساب</li>
-              <li>✕ رمز حساب لازم است</li>
+              <li>✓ هیچ ریسکی برای حساب ندارد</li>
+              <li>✓ پاسخ خصوصی به کامنت (بهترین حالت کامنت‌به‌دایرکت)</li>
+              <li>✓ آمار دقیق: ویو، ریچ، سیو، اشتراک‌گذاری</li>
+              <li>✕ راه‌اندازی‌اش حدود ۱۰ دقیقه طول می‌کشد</li>
+              <li>✕ حساب باید بیزنسی یا کریتور باشد</li>
+              <li>✕ لیست فالوور و دایرکت انبوه نمی‌دهد</li>
             </ul>
             <p className="mt-2 text-[11px] text-slate-500">
-              اگر استفاده می‌کنید: سقف‌ها را پایین نگه دارید و اول با حساب کم‌اهمیت تست کنید.
+              نیازمند ساخت یک اپ در داشبورد متا — راهنمای گام‌به‌گام در تنظیمات.
             </p>
           </div>
         </div>
+
+        <Notice tone="info" title="پیشنهاد عملی">
+          با <strong>ورود ساده</strong> شروع کنید تا همه‌چیز کار کند. بعداً اگر آمار دقیق یا
+          کامنت‌به‌دایرکتِ بی‌ریسک خواستید، همان حساب را با <strong>API رسمی</strong> هم وصل کنید —
+          اپ خودش برای هر کار موتور مناسب را انتخاب می‌کند.
+        </Notice>
+
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-white/[0.07] px-3 py-2.5">
+          <p className="text-[11px] leading-relaxed text-slate-400">
+            می‌خواهید حساب دیگری وصل کنید و پنجره‌ی ورود شما را از قبل وارد نشان می‌دهد؟
+          </p>
+          <button
+            className="btn-ghost btn-sm shrink-0"
+            onClick={() => {
+              void call('clearWebLogin').then(() =>
+                toasts.push('info', 'نشست مرورگر داخلی پاک شد — حالا می‌توانید با حساب دیگری وارد شوید')
+              )
+            }}
+          >
+            خروج از پنجره‌ی ورود
+          </button>
+        </div>
+
+        <details className="mt-3">
+          <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">
+            روش سوم: ورود با نام کاربری و رمز (توصیه نمی‌شود)
+          </summary>
+          <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3">
+            <p className="text-[11px] leading-relaxed text-slate-300">
+              این روش از کتابخانه‌ای استفاده می‌کند که نسخه‌ی قدیمی اپ موبایل را اعلام می‌کند و
+              اینستاگرام معمولاً با پیام{' '}
+              <span dir="ltr" className="text-amber-200">
+                Your version of Instagram is out of date
+              </span>{' '}
+              ردش می‌کند. فقط به‌عنوان پشتیبان نگه داشته شده — اگر «ورود ساده» به هر دلیلی کار نکرد،
+              امتحانش کنید.
+            </p>
+            <button className="btn-ghost btn-sm mt-2" onClick={() => setSessionModal(true)}>
+              امتحان با نام کاربری و رمز
+            </button>
+          </div>
+        </details>
       </Card>
 
       {sessionModal && (
@@ -262,6 +328,12 @@ function SessionLoginModal({
             ابتدا از صفحه‌ی تنظیمات، بخش «موتور پیشرفته» را روشن کنید. آنجا ریسک‌ها توضیح داده شده.
           </Notice>
         )}
+
+        <Notice tone="warn" title="این روش معمولاً کار نمی‌کند">
+          کتابخانه‌ای که این مسیر استفاده می‌کند نسخه‌ی قدیمی اپ موبایل را اعلام می‌کند و اینستاگرام
+          اغلب با پیام «Your version of Instagram is out of date» ردش می‌کند. اگر این خطا را گرفتید،
+          باگ اپ نیست — از دکمه‌ی «ورود ساده با اینستاگرام» استفاده کنید که این مشکل را ندارد.
+        </Notice>
 
         <Notice tone="danger" title="قبل از ادامه بخوانید">
           این روش شرایط استفاده‌ی اینستاگرام را نقض می‌کند و ممکن است حساب موقتاً محدود شود. رمز شما با

@@ -698,6 +698,16 @@ export const jobsRepo = {
       )
       .run(now() + delayMs, error, now(), id)
   },
+  /**
+   * موکول کردن کار به آینده *بدون* افزایش شمارنده‌ی تلاش.
+   * برای وقتی که نگهبان ایمنی اجازه نداده — این تأخیر است، نه شکست، و نباید
+   * سهمیه‌ی تلاش‌های کار را بسوزاند (وگرنه یک شب ساعات سکوت، کار را می‌کشد).
+   */
+  defer(id: number, delayMs: number, reason: string): void {
+    getDb()
+      .prepare("UPDATE jobs SET status='pending', run_at=?, last_error=?, updated_at=? WHERE id=?")
+      .run(now() + delayMs, reason, now(), id)
+  },
   /** کارهایی که هنگام بسته‌شدن ناگهانی اپ در حالت running مانده‌اند */
   recoverStuck(): number {
     const info = getDb()

@@ -62,8 +62,14 @@ interface Captured {
   body?: string
 }
 let captured: Captured[] = []
-let nextResponse: { status: number; body: string } = { status: 200, body: '{}' }
-const responseQueue: { status: number; body: string }[] = []
+interface FakeResponse {
+  status: number
+  body: string
+  url?: string
+  redirected?: boolean
+}
+let nextResponse: FakeResponse = { status: 200, body: '{}' }
+const responseQueue: FakeResponse[] = []
 
 const realFetch = globalThis.fetch
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -78,6 +84,8 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   return {
     ok: r.status >= 200 && r.status < 300,
     status: r.status,
+    url: r.url ?? url,
+    redirected: r.redirected ?? false,
     text: async () => r.body
   } as Response
 }) as typeof fetch
@@ -112,7 +120,7 @@ async function run(): Promise<void> {
   console.log('\n=== 3. نگاشت خطاها ===')
   const expectError = async (
     label: string,
-    resp: { status: number; body: string },
+    resp: FakeResponse,
     kind: 'auth' | 'rate' | 'plain'
   ): Promise<void> => {
     nextResponse = resp
@@ -140,9 +148,27 @@ async function run(): Promise<void> {
     'rate'
   )
   await expectError(
-    'صفحه‌ی HTML یعنی نشست باطل',
-    { status: 200, body: '<!DOCTYPE html><html><body>login</body></html>' },
+    'ریدایرکت به صفحه‌ی لاگین یعنی نشست باطل',
+    {
+      status: 200,
+      body: '<!DOCTYPE html><html><body>login</body></html>',
+      url: 'https://www.instagram.com/accounts/login/?next=/api/v1/feed/',
+      redirected: true
+    },
     'auth'
+  )
+  await expectError(
+    'HTML بدون ریدایرکت = خطای قابل تلاش دوباره، نه نشست باطل',
+    { status: 200, body: '<!DOCTYPE html><html><body>something else</body></html>' },
+    'plain'
+  )
+  await expectError(
+    'کلمه‌ی spam داخل HTML نباید خطای اسپم بدهد',
+    {
+      status: 200,
+      body: '<!DOCTYPE html><html><body>report spam feedback_required</body></html>'
+    },
+    'plain'
   )
   await expectError('۵۰۰ خطای معمولی است', { status: 500, body: 'server error' }, 'plain')
 

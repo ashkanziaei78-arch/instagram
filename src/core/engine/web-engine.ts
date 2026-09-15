@@ -157,78 +157,191 @@ export class WebEngine implements IEngine {
 
     const text = await res.text()
 
-    if (res.status === 401 || res.status === 403) {
-      // اینستاگرام گاهی برای نشست منقضی و گاهی برای اکشن مسدودشده ۴۰۳ می‌دهد
-      if (/login_required|checkpoint_required/i.test(text)) {
-        throw new AuthError(
-          opts.context + ': نشست منقضی شده یا اینستاگرام تأیید هویت می‌خواهد — دوباره وارد شوید'
-        )
+    // اول تلاش می‌کنیم JSON را پارس کنیم، *بعد* درباره‌ی خطا قضاوت می‌کنیم.
+    //
+    // چرا این ترتیب مهم است: قبلا دنبال کلمه‌ی «spam» در متن خام می‌گشتیم. صفحه‌ی
+    // HTML اینستاگرام این کلمه را جایی در اسکریپت‌هایش دارد، پس هر پاسخ HTML
+    // به‌اشتباه «اینستاگرام اکشن شما را اسپم علامت زد» گزارش می‌شد — پیامی که
+    // کاربر را به دنبال مشکلی می‌فرستاد که اصلا وجود نداشت.
+    let parsed: Record<string, unknown> | null = null
+    const looksLikeHtml = /^\s*(<!DOCTYPE|<html)/i.test(text)
+    if (!looksLikeHtml) {
+      try {
+        parsed = JSON.parse(text) as Record<string, unknown>
+      } catch {
+        parsed = null
       }
-      throw new AuthError(opts.context + ': دسترسی رد شد (' + res.status + ')')
     }
-    if (res.status === 429) {
-      throw new RateLimitError(opts.context + ': اینستاگرام درخواست‌ها را محدود کرد (429)')
-    }
-    if (/feedback_required|spam/i.test(text)) {
+
+    const message = typeof parsed?.message === 'string' ? parsed.message : ''
+    const isSpamFlag = message === 'feedback_required' || parsed?.spam === true
+    const isLoginRequired = message === 'login_required' || message === 'checkpoint_required'
+
+    if (isSpamFlag) {
       throw new RateLimitError(
         opts.context + ': اینستاگرام این اکشن را اسپم علامت زد — سقف‌ها را پایین بیاورید',
         60 * 60 * 1000
       )
     }
-    if (!res.ok) {
-      throw new Error(opts.context + ': پاسخ ' + res.status + ' — ' + text.slice(0, 200))
+    if (res.status === 429) {
+      throw new RateLimitError(opts.context + ': اینستاگرام درخواست‌ها را محدود کرد (429)')
+    }
+    if (isLoginRequired || res.status === 401) {
+      throw new AuthError(opts.context + ': نشست معتبر نیست — دوباره وارد شوید')
+    }
+    if (res.status === 403) {
+      throw new AuthError(
+        opts.context + ': دسترسی رد شد (۴۰۳)' + (message ? ' — ' + message : '')
+      )
     }
 
-    try {
-      return JSON.parse(text) as T
-    } catch {
-      // وقتی نشست باطل است، اینستاگرام به‌جای JSON صفحه‌ی HTML لاگین می‌دهد
-      if (/<!DOCTYPE html|<html/i.test(text)) {
+    // پاسخ HTML دو معنی کاملا متفاوت دارد و نباید یکسان رفتار کرد:
+    //
+    //  الف) اینستاگرام ما را به صفحه‌ی لاگین ریدایرکت کرده → نشست باطل است و
+    //       تلاش دوباره بی‌فایده؛ باید AuthError بدهیم تا صف بی‌خود retry نکند.
+    //  ب)  اندپوینت پاسخ HTML داده بدون ریدایرکت → احتمالا آدرس عوض شده یا
+    //       مشکل موقتی است؛ خطای معمولی که قابل تلاش دوباره باشد.
+    //
+    // تشخیص را از res.redirected و res.url می‌گیریم، نه از حدس‌زدن محتوای HTML.
+    if (looksLikeHtml) {
+      const landedOnLogin = /\/accounts\/login/i.test(res.url ?? '')
+      if (landedOnLogin) {
         throw new AuthError(
-          opts.context + ': اینستاگرام صفحه‌ی ورود را برگرداند — نشست معتبر نیست، دوباره وارد شوید'
+          opts.context + ': اینستاگرام به صفحه‌ی ورود هدایت کرد — نشست باطل است، دوباره وارد شوید'
         )
       }
-      throw new Error(opts.context + ': پاسخ نامعتبر بود')
+      throw new Error(
+        opts.context + ': به‌جای داده، صفحه‌ی وب برگشت (وضعیت ' + res.status + ')'
+      )
     }
+
+    if (!res.ok) {
+      throw new Error(opts.context + ': پاسخ ' + res.status + ' — ' + text.slice(0, 160))
+    }
+    if (parsed === null) {
+      throw new Error(opts.context + ': پاسخ قابل خواندن نبود — ' + text.slice(0, 160))
+    }
+
+    return parsed as T
   }
 
   /* ─────────────────────────── پروفایل ─────────────────────────── */
 
-  /** تأیید نشست + گرفتن اطلاعات حساب. اولین کاری که بعد از ورود انجام می‌شود. */
+  /**
+   * تأیید نشست + گرفتن اطلاعات حساب.
+   *
+   * چرا زنجیره‌ی چند اندپوینتی و نه یکی؟ اینستاگرام چند آدرس «من کی هستم» دارد
+   * و کدامشان جواب می‌دهد به منطقه، نوع حساب و آزمایش‌های A/B بستگی دارد. با یک
+   * آدرس، اگر آن یکی جواب ندهد کاربر پیام مبهم «نشست نامعتبر» می‌گیرد در حالی
+   * که نشستش کاملا سالم است.
+   *
+   * اگر همه شکست خوردند، خطا *دقیقا* می‌گوید هر کدام چه جوابی داد — تا مشکل
+   * قابل پیگیری باشد، نه یک بن‌بست.
+   */
   async verifyAndGetProfile(data: WebSessionData): Promise<IgProfile> {
     const pk = data.cookies.ds_user_id
-    if (!pk) throw new AuthError('کوکی ds_user_id موجود نیست')
+    if (!pk) {
+      throw new AuthError('کوکی ds_user_id موجود نیست — ورود کامل نشده است')
+    }
 
-    // موقتاً روی یک شناسه‌ی ساختگی سوار می‌کنیم تا request بتواند نشست را بخواند
     const tempId = -1
     this.sessions.set(tempId, data)
+    const failures: string[] = []
+
+    type UserShape = {
+      pk?: string | number
+      id?: string | number
+      username?: string
+      full_name?: string
+      profile_pic_url?: string
+      follower_count?: number
+      following_count?: number
+      media_count?: number
+      edge_followed_by?: { count?: number }
+      edge_follow?: { count?: number }
+      edge_owner_to_timeline_media?: { count?: number }
+    }
+
+    const toProfile = (u: UserShape): IgProfile => ({
+      ig_user_id: String(u.pk ?? u.id ?? pk),
+      username: u.username!,
+      name: u.full_name,
+      profile_picture_url: u.profile_pic_url,
+      followers_count: u.follower_count ?? u.edge_followed_by?.count ?? 0,
+      follows_count: u.following_count ?? u.edge_follow?.count ?? 0,
+      media_count: u.media_count ?? u.edge_owner_to_timeline_media?.count ?? 0
+    })
+
+    /** هر تلاش: اگر کاربرِ نام‌دار برگرداند موفق است، وگرنه دلیل را ثبت می‌کند */
+    const attempt = async (
+      label: string,
+      fn: () => Promise<UserShape | null>
+    ): Promise<IgProfile | null> => {
+      try {
+        const u = await fn()
+        if (u?.username) return toProfile(u)
+        failures.push(label + ': کاربری برنگرداند')
+      } catch (e) {
+        failures.push(label + ': ' + (e as Error).message.slice(0, 110))
+      }
+      return null
+    }
+
     try {
-      const d = await this.request<{
-        user?: {
-          pk?: string | number
-          username?: string
-          full_name?: string
-          profile_pic_url?: string
-          follower_count?: number
-          following_count?: number
-          media_count?: number
+      // ۱) میزبان وب — همان که مرورگر در صفحه‌ی پروفایل صدا می‌زند
+      let p = await attempt('users/info (web)', async () => {
+        const d = await this.request<{ user?: UserShape }>(
+          tempId,
+          '/api/v1/users/' + pk + '/info/',
+          { context: 'تأیید نشست' }
+        )
+        return d.user ?? null
+      })
+      if (p) return p
+
+      // ۲) میزبان موبایل — همان کوکی، آدرس متفاوت. اغلب وقتی وب جواب نمی‌دهد این می‌دهد.
+      p = await attempt('users/info (i.instagram)', async () => {
+        const d = await this.request<{ user?: UserShape }>(
+          tempId,
+          'https://i.instagram.com/api/v1/users/' + pk + '/info/',
+          { context: 'تأیید نشست' }
+        )
+        return d.user ?? null
+      })
+      if (p) return p
+
+      // ۳) فرم ویرایش پروفایل — اندپوینت «من کی هستم» که فقط با ورود کار می‌کند.
+      //    نام کاربری می‌دهد ولی آمار نه، پس با ۴ کاملش می‌کنیم.
+      const formUser = await attempt('accounts/edit', async () => {
+        const d = await this.request<{ form_data?: { username?: string; first_name?: string } }>(
+          tempId,
+          '/api/v1/accounts/edit/web_form_data/',
+          { context: 'تأیید نشست' }
+        )
+        const f = d.form_data
+        return f?.username ? { username: f.username, full_name: f.first_name } : null
+      })
+
+      if (formUser) {
+        // ۴) حالا که نام کاربری را داریم، آمار کامل را بگیریم (اگر نشد، همان کافی است)
+        try {
+          const d = await this.request<{ data?: { user?: UserShape } }>(
+            tempId,
+            '/api/v1/users/web_profile_info/',
+            { query: { username: formUser.username }, context: 'تأیید نشست' }
+          )
+          const u = d.data?.user
+          if (u?.username) return toProfile(u)
+        } catch {
+          /* آمار اختیاری است */
         }
-      }>(tempId, '/api/v1/users/' + pk + '/info/', { context: 'تأیید نشست' })
-
-      const u = d.user
-      if (!u?.username) {
-        throw new AuthError('اینستاگرام اطلاعات حساب را برنگرداند — نشست معتبر نیست')
+        return formUser
       }
 
-      return {
-        ig_user_id: String(u.pk ?? pk),
-        username: u.username,
-        name: u.full_name,
-        profile_picture_url: u.profile_pic_url,
-        followers_count: u.follower_count ?? 0,
-        follows_count: u.following_count ?? 0,
-        media_count: u.media_count ?? 0
-      }
+      throw new AuthError(
+        'نشست تأیید نشد. اینستاگرام به هیچ‌کدام از آدرس‌ها پاسخ معتبر نداد:\n• ' +
+          failures.join('\n• ')
+      )
     } finally {
       this.sessions.delete(tempId)
     }

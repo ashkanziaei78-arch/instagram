@@ -79,92 +79,162 @@ function hasRequired(map: Record<string, string>): boolean {
   return REQUIRED.every((k) => typeof map[k] === 'string' && map[k].length > 0)
 }
 
+/** تابعی که بررسی می‌کند این کوکی‌ها واقعاً یک نشست معتبر هستند */
+export type SessionVerifier = (result: WebLoginResult) => Promise<boolean>
+
+export interface WebLoginOptions {
+  parent?: BrowserWindow
+  /**
+   * تأییدکننده‌ی نشست. *قبل* از بستن پنجره صدا زده می‌شود.
+   * اگر false برگرداند، پنجره باز می‌ماند و کاربر می‌تواند ادامه دهد.
+   */
+  verify?: SessionVerifier
+  /** حداکثر زمان انتظار برای کامل‌شدن ورود (پیش‌فرض ۱۰ دقیقه) */
+  timeoutMs?: number
+}
+
 /**
- * پنجره‌ی ورود را باز می‌کند و منتظر می‌ماند تا کوکی نشست ظاهر شود.
+ * پنجره‌ی ورود را باز می‌کند و منتظر می‌ماند تا ورود *واقعاً* کامل شود.
  *
- * روش تشخیص موفقیت عمدی ساده است: به‌جای حدس‌زدن از روی آدرس صفحه — که
- * اینستاگرام هر چند وقت عوضش می‌کند — هر ثانیه کوکی‌ها را می‌خوانیم. لحظه‌ای
- * که sessionid و ds_user_id هر دو موجود شدند، کاربر قطعاً وارد شده است،
- * مهم نیست از چه مسیری (رمز، دو مرحله‌ای، یا نشست از قبل باز).
+ * ── دو درسی که از شکست نسخه‌ی قبل گرفته شد ──
+ *
+ * ۱. **وجود کوکی ≠ ورود موفق.** نسخه‌ی قبل به‌محض دیدن sessionid و ds_user_id
+ *    پنجره را می‌بست. اما این کوکی‌ها می‌توانند از یک تلاش ناموفق قبلی، یا از
+ *    نشست ناشناس اینستاگرام مانده باشند. نتیجه: پنجره قبل از اینکه کاربر فرصت
+ *    تایپ پیدا کند بسته می‌شد و بعد خطای «نشست نامعتبر» می‌آمد.
+ *    حالا قبل از بستن، نشست را با یک فراخوانی واقعی *تأیید* می‌کنیم.
+ *
+ * ۲. **خطای بارگذاری نباید پنجره را ببندد.** نسخه‌ی قبل روی هر خطای بارگذاری
+ *    پنجره را می‌بست. روی VPN — که برای دسترسی به اینستاگرام لازم است — خطای
+ *    گذرای ERR_NETWORK_CHANGED کاملاً عادی است. حالا فقط ثبت می‌شود و کاربر
+ *    می‌تواند داخل همان پنجره دوباره تلاش کند.
  */
-export function loginWithInstagramWindow(parent?: BrowserWindow): Promise<WebLoginResult> {
+export function loginWithInstagramWindow(opts: WebLoginOptions = {}): Promise<WebLoginResult> {
+  const { parent, verify, timeoutMs = 10 * 60 * 1000 } = opts
+
   return new Promise<WebLoginResult>((resolve, reject) => {
     const ses = electronSession.fromPartition(PARTITION)
     const userAgent = browserLikeUserAgent(ses.getUserAgent())
 
     const win = new BrowserWindow({
-      width: 480,
-      height: 760,
+      width: 520,
+      height: 780,
       parent,
       modal: !!parent,
       autoHideMenuBar: true,
-      title: 'ورود به اینستاگرام',
+      title: 'ورود به اینستاگرام — بعد از ورود، این پنجره خودکار بسته می‌شود',
       backgroundColor: '#ffffff',
       webPreferences: {
         partition: PARTITION,
         nodeIntegration: false,
-        contextIsolation: true,
-        // هیچ کد ما داخل این صفحه اجرا نمی‌شود — فقط صفحه‌ی خود اینستاگرام
-        preload: undefined
+        contextIsolation: true
       }
     })
 
     win.webContents.setUserAgent(userAgent)
 
     let settled = false
+    let checking = false
     let poller: NodeJS.Timeout | null = null
+    let timeoutTimer: NodeJS.Timeout | null = null
+    /** کوکی‌هایی که قبلاً تأیید نشدند — دوباره امتحانشان نمی‌کنیم */
+    const rejectedSessionIds = new Set<string>()
+    let lastFailure = ''
 
-    const finish = (fn: () => void): void => {
+    const cleanup = (): void => {
+      if (poller) clearInterval(poller)
+      if (timeoutTimer) clearTimeout(timeoutTimer)
+      poller = null
+      timeoutTimer = null
+    }
+
+    const succeed = (result: WebLoginResult): void => {
       if (settled) return
       settled = true
-      if (poller) clearInterval(poller)
-      fn()
+      cleanup()
+      resolve(result)
+      if (!win.isDestroyed()) win.close()
+    }
+
+    const failNow = (err: WebLoginError): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(err)
       if (!win.isDestroyed()) win.close()
     }
 
     const checkCookies = async (): Promise<void> => {
-      if (settled) return
+      if (settled || checking) return
+      checking = true
       try {
         const all = await ses.cookies.get({ domain: '.instagram.com' })
         const map = toMap(all)
-        if (hasRequired(map)) {
-          finish(() => resolve({ cookies: map as WebSessionCookies, userAgent }))
+        if (!hasRequired(map)) return
+
+        const sid = map.sessionid
+        if (rejectedSessionIds.has(sid)) return // این نشست را قبلاً امتحان کردیم
+
+        const result: WebLoginResult = { cookies: map as WebSessionCookies, userAgent }
+
+        if (!verify) {
+          succeed(result)
+          return
+        }
+
+        const valid = await verify(result).catch((e: Error) => {
+          lastFailure = e.message
+          return false
+        })
+
+        if (valid) {
+          succeed(result)
+        } else {
+          // نشست معتبر نبود: علامتش می‌زنیم و پنجره را *باز می‌گذاریم* تا
+          // کاربر ورودش را کامل کند
+          rejectedSessionIds.add(sid)
         }
       } catch {
-        // خطای خواندن کوکی موقتی است؛ دور بعدی دوباره امتحان می‌شود
+        // خطای خواندن کوکی گذراست؛ دور بعد دوباره
+      } finally {
+        checking = false
       }
     }
 
-    // هر ثانیه چک کن — و بلافاصله بعد از هر ناوبری هم، تا اگر کاربر از قبل
-    // وارد بود، پنجره فوراً بسته شود و او اصلاً چیزی تایپ نکند
-    poller = setInterval(() => void checkCookies(), 1000)
+    poller = setInterval(() => void checkCookies(), 1500)
     win.webContents.on('did-navigate', () => void checkCookies())
     win.webContents.on('did-navigate-in-page', () => void checkCookies())
 
     win.webContents.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
-      // -3 یعنی ناوبری لغو شده؛ طبیعی است و خطا نیست
       if (!isMainFrame || code === -3) return
-      finish(() =>
-        reject(
-          new WebLoginError(
-            'صفحه‌ی ورود اینستاگرام باز نشد: ' + desc,
-            'اتصال اینترنت را بررسی کنید. اگر از فیلترشکن استفاده می‌کنید، روشن باشد. (' + url + ')'
-          )
-        )
-      )
+      // پنجره را نمی‌بندیم: روی VPN خطای گذرا عادی است و کاربر می‌تواند
+      // داخل همان پنجره رفرش کند یا صبر کند تا اتصال برگردد
+      lastFailure = desc + ' (' + url + ')'
     })
 
-    win.on('closed', () => {
-      if (!settled) {
-        settled = true
-        if (poller) clearInterval(poller)
-        reject(
-          new WebLoginError(
-            'پنجره‌ی ورود بسته شد',
-            'برای اتصال، باید ورود را تا انتها کامل کنید'
-          )
+    timeoutTimer = setTimeout(() => {
+      failNow(
+        new WebLoginError(
+          'زمان ورود تمام شد',
+          lastFailure
+            ? 'آخرین مشکل: ' + lastFailure
+            : 'ورود در مهلت مقرر کامل نشد. دوباره تلاش کنید.'
         )
-      }
+      )
+    }, timeoutMs)
+
+    win.on('closed', () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(
+        new WebLoginError(
+          'پنجره‌ی ورود بسته شد',
+          lastFailure
+            ? 'آخرین مشکل: ' + lastFailure
+            : 'ورود کامل نشد. اگر وارد شده بودید ولی پنجره بسته نشد، دوباره تلاش کنید.'
+        )
+      )
     })
 
     void win.loadURL('https://www.instagram.com/accounts/login/')

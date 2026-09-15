@@ -11,7 +11,7 @@ import {
   rulesRepo,
   settingsRepo
 } from '../core/db/repos'
-import { engines } from '../core/engine'
+import { engines, type IgProfile } from '../core/engine'
 import { SessionEngine } from '../core/engine/session-engine'
 import { jobQueue } from '../core/queue/job-queue'
 import { safetyGate } from '../core/queue/limiter'
@@ -28,6 +28,11 @@ import { pollFollowers, pollMedia, pollerScheduler, syncFollowing } from '../cor
 import { IPC_CHANNELS, type ApiResult, type IpcApi } from '../shared/ipc'
 import { connectInstagramAccount, refreshLongLivedToken, TOKEN_REFRESH_THRESHOLD_MS } from './auth/oauth'
 import { clearWebLoginSession, loginWithInstagramWindow } from './auth/web-login'
+import {
+  buildCookiesFromSessionId,
+  defaultUserAgent,
+  parseSessionId
+} from './auth/session-id-login'
 import { secureStore } from './secure-store'
 import { startWebhookFromSettings, webhookServer } from './webhook-server'
 
@@ -89,13 +94,37 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
      * زدن این دکمه و تأیید هشدارِ کنارش، عملاً همین را خواسته است.
      */
     webLogin: async () => {
-      const { cookies, userAgent } = await loginWithInstagramWindow(getWindow() ?? undefined)
-      const sessionData = { cookies: cookies as Record<string, string>, userAgent }
+      let profile: IgProfile | null = null
+      let sessionData: { cookies: Record<string, string>; userAgent: string } | null = null
 
-      // نشست را *قبل* از ذخیره تأیید می‌کنیم. اگر این کار را نمی‌کردیم، اتصال
-      // «موفق» اعلام می‌شد و کاربر ساعت‌ها بعد، سر اولین دایرکت، با خطای مبهم
-      // می‌فهمید که وصل نشده.
-      const profile = await engines().web.verifyAndGetProfile(sessionData)
+      // تأیید *داخل* حلقه‌ی پنجره انجام می‌شود، نه بعد از بستنش.
+      // این‌طور اگر کوکی‌های کهنه‌ای از تلاش قبلی مانده باشند، پنجره بی‌جهت
+      // بسته نمی‌شود — کاربر همان‌جا ورودش را ادامه می‌دهد.
+      const result = await loginWithInstagramWindow({
+        parent: getWindow() ?? undefined,
+        verify: async (r) => {
+          const data = { cookies: r.cookies as Record<string, string>, userAgent: r.userAgent }
+          try {
+            profile = await engines().web.verifyAndGetProfile(data)
+            sessionData = data
+            return true
+          } catch (e) {
+            logRepo.add({
+              level: 'info',
+              category: 'auth',
+              message: 'نشست هنوز کامل نیست، پنجره باز می‌ماند: ' + (e as Error).message.slice(0, 120)
+            })
+            return false
+          }
+        }
+      })
+
+      // نباید رخ دهد چون پنجره فقط بعد از تأیید بسته می‌شود، ولی تایپ‌ها را قطعی می‌کنیم
+      const finalSession = sessionData ?? {
+        cookies: result.cookies as Record<string, string>,
+        userAgent: result.userAgent
+      }
+      const finalProfile: IgProfile = profile ?? (await engines().web.verifyAndGetProfile(finalSession))
 
       if (!engines().sessionEnabled) {
         engines().setSessionEnabled(true)
@@ -104,6 +133,53 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
           category: 'settings',
           message: 'قابلیت‌های غیررسمی با «ورود ساده» خودکار فعال شدند'
         })
+      }
+
+      const account = accountsRepo.upsert({
+        ig_user_id: finalProfile.ig_user_id,
+        username: finalProfile.username,
+        name: finalProfile.name ?? null,
+        profile_picture_url: finalProfile.profile_picture_url ?? null,
+        engine: 'session',
+        followers_count: finalProfile.followers_count ?? 0,
+        follows_count: finalProfile.follows_count ?? 0,
+        media_count: finalProfile.media_count ?? 0
+      })
+      engines().web.attach(account.id, finalSession)
+      accountsRepo.snapshot(
+        account.id,
+        finalProfile.followers_count ?? 0,
+        finalProfile.follows_count ?? 0,
+        finalProfile.media_count ?? 0
+      )
+      logRepo.add({
+        account_id: account.id,
+        level: 'success',
+        category: 'auth',
+        message: 'حساب @' + finalProfile.username + ' با ورود ساده وصل شد'
+      })
+      return ok(account)
+    },
+
+    clearWebLogin: async () => {
+      await clearWebLoginSession()
+      return ok()
+    },
+
+    /**
+     * اتصال با کد نشست — مسیری که نه به فیسبوک وابسته است و نه به شبکه‌ی داخل اپ.
+     * کاربر در مرورگر خودش (که از قبل وارد است) یک مقدار را کپی می‌کند.
+     */
+    connectWithSessionId: async (p: { sessionid: string }) => {
+      const parsed = parseSessionId(p.sessionid)
+      const userAgent = defaultUserAgent()
+      const cookies = await buildCookiesFromSessionId(parsed, userAgent)
+      const sessionData = { cookies, userAgent }
+
+      const profile = await engines().web.verifyAndGetProfile(sessionData)
+
+      if (!engines().sessionEnabled) {
+        engines().setSessionEnabled(true)
       }
 
       const account = accountsRepo.upsert({
@@ -127,14 +203,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         account_id: account.id,
         level: 'success',
         category: 'auth',
-        message: 'حساب @' + profile.username + ' با ورود ساده وصل شد'
+        message: 'حساب @' + profile.username + ' با کد نشست وصل شد'
       })
       return ok(account)
-    },
-
-    clearWebLogin: async () => {
-      await clearWebLoginSession()
-      return ok()
     },
 
     sessionLogin: async (p: { username: string; password: string }) => {

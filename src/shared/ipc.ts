@@ -70,6 +70,8 @@ export interface IpcApi {
   webLogin(): Promise<ApiResult<AccountRow>>
   /** پاک‌کردن نشست مرورگر داخلی، برای وصل‌کردن حساب دیگر */
   clearWebLogin(): Promise<ApiResult>
+  /** اتصال با چسباندن sessionid از مرورگر خود کاربر */
+  connectWithSessionId(p: { sessionid: string }): Promise<ApiResult<AccountRow>>
   sessionLogin(p: { username: string; password: string }): Promise<
     ApiResult<{ status: 'connected' | 'two_factor' | 'checkpoint'; message: string; account?: AccountRow }>
   >
@@ -142,6 +144,7 @@ export const IPC_CHANNELS: IpcChannel[] = [
   'connectGraphAccount',
   'webLogin',
   'clearWebLogin',
+  'connectWithSessionId',
   'sessionLogin',
   'sessionTwoFactor',
   'removeAccount',

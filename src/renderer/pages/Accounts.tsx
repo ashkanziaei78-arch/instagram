@@ -13,6 +13,7 @@ export function AccountsPage({
   const [connecting, setConnecting] = useState(false)
   const [webBusy, setWebBusy] = useState(false)
   const [sessionModal, setSessionModal] = useState(false)
+  const [sidModal, setSidModal] = useState(false)
   const [sessionAvailable, setSessionAvailable] = useState({ enabled: false, libraryAvailable: false })
 
   /**
@@ -74,6 +75,9 @@ export function AccountsPage({
           <div className="flex gap-2">
             <button className="btn-primary btn-sm" disabled={webBusy} onClick={() => void connectWeb()}>
               {webBusy ? 'در انتظار ورود…' : '+ ورود ساده با اینستاگرام'}
+            </button>
+            <button className="btn-ghost btn-sm" onClick={() => setSidModal(true)}>
+              + اتصال با کد نشست
             </button>
             <button className="btn-ghost btn-sm" disabled={connecting} onClick={() => void connectGraph()}>
               {connecting ? 'در حال اتصال…' : '+ API رسمی'}
@@ -224,6 +228,16 @@ export function AccountsPage({
           </div>
         </details>
       </Card>
+
+      {sidModal && (
+        <SessionIdModal
+          onClose={() => setSidModal(false)}
+          onDone={() => {
+            setSidModal(false)
+            onChanged()
+          }}
+        />
+      )}
 
       {sessionModal && (
         <SessionLoginModal
@@ -376,6 +390,133 @@ function SessionLoginModal({
             />
           </Field>
         )}
+      </div>
+    </Modal>
+  )
+}
+
+/* ═══════════════════════ اتصال با کد نشست ═══════════════════════ */
+
+/**
+ * ساده‌ترین مسیر وقتی بقیه کار نمی‌کنند.
+ *
+ * کاربر در مرورگر خودش — که از قبل وارد اینستاگرام است و VPN اش کار می‌کند —
+ * یک مقدار را کپی می‌کند. نه فیسبوک لازم است، نه شماره‌ی تلفن، نه اینکه شبکه‌ی
+ * داخل خود اپ به اینستاگرام برسد.
+ */
+function SessionIdModal({
+  onClose,
+  onDone
+}: {
+  onClose: () => void
+  onDone: () => void
+}): JSX.Element {
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (): Promise<void> => {
+    if (!value.trim()) {
+      toasts.push('warn', 'مقدار sessionid را بچسبانید')
+      return
+    }
+    setBusy(true)
+    const res = await callRaw('connectWithSessionId', { sessionid: value.trim() })
+    setBusy(false)
+    if (res.ok) {
+      toasts.push('success', 'حساب با موفقیت وصل شد')
+      onDone()
+    } else {
+      toasts.push('error', res.error ?? 'اتصال ناموفق بود', res.hint)
+    }
+  }
+
+  return (
+    <Modal
+      open
+      wide
+      onClose={onClose}
+      title="اتصال با کد نشست"
+      subtitle="وقتی روش‌های دیگر به مشکل می‌خورند، این همیشه کار می‌کند"
+      footer={
+        <>
+          <button className="btn-ghost" onClick={onClose}>
+            انصراف
+          </button>
+          <button className="btn-primary" disabled={busy} onClick={() => void submit()}>
+            {busy ? 'در حال بررسی…' : 'اتصال'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Notice tone="success" title="چرا این روش دردسر ندارد">
+          به فیسبوک، شماره‌ی تلفن و اپ متا هیچ کاری ندارد. چون مقدار را از مرورگر
+          <strong> خودتان </strong>
+          می‌گیرید، اگر اینستاگرام آنجا باز می‌شود، اینجا هم کار می‌کند.
+        </Notice>
+
+        <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
+          <p className="mb-3 text-sm font-medium text-slate-200">مرحله به مرحله</p>
+          <ol className="space-y-2.5 text-xs leading-relaxed text-slate-300">
+            <li>
+              <span className="chip-info me-1.5">۱</span>
+              در مرورگر خودتان (کروم / فایرفاکس) وارد{' '}
+              <code className="rounded bg-black/40 px-1.5 py-0.5" dir="ltr">
+                instagram.com
+              </code>{' '}
+              شوید — اگر از قبل وارد هستید، همین کافی است.
+            </li>
+            <li>
+              <span className="chip-info me-1.5">۲</span>
+              کلید <kbd className="rounded bg-black/40 px-1.5 py-0.5">F12</kbd> را بزنید تا ابزار
+              توسعه‌دهنده باز شود.
+            </li>
+            <li>
+              <span className="chip-info me-1.5">۳</span>
+              به تب <strong>Application</strong> بروید (در فایرفاکس: <strong>Storage</strong>)، از
+              ستون چپ <strong>Cookies</strong> و بعد{' '}
+              <code className="rounded bg-black/40 px-1.5 py-0.5" dir="ltr">
+                https://www.instagram.com
+              </code>{' '}
+              را انتخاب کنید.
+            </li>
+            <li>
+              <span className="chip-info me-1.5">۴</span>
+              در لیست، ردیف{' '}
+              <code className="rounded bg-black/40 px-1.5 py-0.5 text-fuchsia-300" dir="ltr">
+                sessionid
+              </code>{' '}
+              را پیدا کنید و روی ستون <strong>Value</strong> دوبار کلیک کنید تا انتخاب شود، بعد
+              کپی کنید.
+            </li>
+            <li>
+              <span className="chip-info me-1.5">۵</span>
+              همان را در کادر پایین بچسبانید.
+            </li>
+          </ol>
+        </div>
+
+        <Field
+          label="مقدار sessionid"
+          hint="اگر کل رشته‌ی کوکی‌ها را هم بچسبانید مشکلی نیست — خودش sessionid را پیدا می‌کند. شناسه‌ی حسابتان هم از همین مقدار استخراج می‌شود."
+        >
+          <textarea
+            className="input min-h-[80px] resize-y font-mono text-xs"
+            dir="ltr"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="12345678%3AabcDEF123...%3A26%3AAYc..."
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </Field>
+
+        <Notice tone="warn" title="این مقدار را با کسی به اشتراک نگذارید">
+          کد نشست مثل رمز عبور است — هر کسی آن را داشته باشد به حساب شما دسترسی دارد. اپ آن را با
+          رمزنگاری ویندوز روی همین کامپیوتر ذخیره می‌کند و به هیچ سروری نمی‌فرستد.
+          <br />
+          اگر در اینستاگرام «خروج از همه‌ی دستگاه‌ها» بزنید، این کد باطل می‌شود و باید دوباره وصل شوید.
+        </Notice>
       </div>
     </Modal>
   )

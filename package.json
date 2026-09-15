@@ -14,9 +14,10 @@
     "pack:dir": "electron-vite build && electron-builder --dir",
     "test:db": "esbuild scripts/test-db.ts --bundle --platform=node --format=cjs --external:node-sqlite3-wasm --outfile=.test-db.cjs --log-level=error && node .test-db.cjs",
     "test:matcher": "esbuild scripts/test-matcher.ts --bundle --platform=node --format=cjs --outfile=.test-matcher.cjs --log-level=error && node .test-matcher.cjs",
-    "test": "npm run test:db && npm run test:matcher && npm run test:web",
+    "test": "npm run test:db && npm run test:matcher && npm run test:web && npm run test:sessionid",
     "fix:electron": "node scripts/install-electron.mjs",
-    "test:web": "esbuild scripts/test-web-engine.ts --bundle --platform=node --format=cjs --external:node-sqlite3-wasm --outfile=.test-web.cjs --log-level=error && node .test-web.cjs"
+    "test:web": "esbuild scripts/test-web-engine.ts --bundle --platform=node --format=cjs --external:node-sqlite3-wasm --outfile=.test-web.cjs --log-level=error && node .test-web.cjs",
+    "test:sessionid": "esbuild scripts/test-sessionid.ts --bundle --platform=node --format=cjs --external:electron --outfile=.test-sid.cjs --log-level=error && node .test-sid.cjs"
   },
   "dependencies": {
     "express": "^4.21.1",

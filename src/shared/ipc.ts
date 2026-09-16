@@ -72,6 +72,10 @@ export interface IpcApi {
   clearWebLogin(): Promise<ApiResult>
   /** اتصال با چسباندن sessionid از مرورگر خود کاربر */
   connectWithSessionId(p: { sessionid: string }): Promise<ApiResult<AccountRow>>
+  /** لینک اجازه‌ی اینستاگرام، برای باز کردن در مرورگر خود کاربر */
+  getAuthUrl(): Promise<ApiResult<{ url: string; bundled: boolean; redirectUri: string }>>
+  /** تکمیل اتصال رسمی با آدرس بازگشتی که کاربر از مرورگرش کپی کرده */
+  connectWithAuthCode(p: { codeOrUrl: string }): Promise<ApiResult<AccountRow>>
   sessionLogin(p: { username: string; password: string }): Promise<
     ApiResult<{ status: 'connected' | 'two_factor' | 'checkpoint'; message: string; account?: AccountRow }>
   >
@@ -145,6 +149,8 @@ export const IPC_CHANNELS: IpcChannel[] = [
   'webLogin',
   'clearWebLogin',
   'connectWithSessionId',
+  'getAuthUrl',
+  'connectWithAuthCode',
   'sessionLogin',
   'sessionTwoFactor',
   'removeAccount',

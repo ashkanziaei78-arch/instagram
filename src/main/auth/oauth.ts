@@ -14,18 +14,61 @@ import { secureStore } from '../secure-store'
  * ثبت کرده‌اید (حتی صفحه‌ی اصلی سایتتان)، بدون نیاز به هیچ کد سمت سرور.
  */
 
-const AUTH_HOST = 'https://www.instagram.com/oauth/authorize'
+/**
+ * مسیر third_party همانی است که سرویس‌های زنده‌ی امروز استفاده می‌کنند.
+ * مسیر ساده‌ی /oauth/authorize هم کار می‌کند ولی روی بعضی حساب‌ها به صفحه‌ی
+ * خطا می‌رود، پس همین را پیش‌فرض گذاشته‌ایم.
+ */
+const AUTH_HOST = 'https://www.instagram.com/oauth/authorize/third_party'
 const TOKEN_HOST = 'https://api.instagram.com/oauth/access_token'
 const GRAPH_HOST = 'https://graph.instagram.com'
 
-/** مجوزهای لازم برای همه‌ی قابلیت‌های اپ */
-export const REQUIRED_SCOPES = [
+/**
+ * مجوزهای درخواستی.
+ *
+ * عمدا حداقلی نگه داشته شده: هر مجوز اضافه یعنی App Review سخت‌تر برای وقتی
+ * می‌خواهید اپ را به دست کاربران دیگر برسانید. publish را حذف کردیم چون اپ
+ * اصلا پست منتشر نمی‌کند، و insights اختیاری است چون فقط برای آمار ریچ و سیو
+ * لازم است و بدونش بقیه‌ی قابلیت‌ها کار می‌کنند.
+ */
+export const CORE_SCOPES = [
   'instagram_business_basic',
   'instagram_business_manage_messages',
-  'instagram_business_manage_comments',
-  'instagram_business_content_publish',
-  'instagram_business_manage_insights'
+  'instagram_business_manage_comments'
 ]
+export const INSIGHTS_SCOPE = 'instagram_business_manage_insights'
+
+export function scopesFor(withInsights: boolean): string[] {
+  return withInsights ? [...CORE_SCOPES, INSIGHTS_SCOPE] : CORE_SCOPES
+}
+
+export const REQUIRED_SCOPES = scopesFor(true)
+
+/**
+ * اعتبارنامه‌ی اپ متا که در زمان بیلد جاسازی می‌شود.
+ *
+ * چرا این وجود دارد: سرویس‌هایی مثل Inzy یک اپ متای *واحد* دارند و کاربرانشان
+ * هرگز App ID و Secret نمی‌بینند — فقط «اجازه» را می‌زنند. اگر می‌خواهید اپ را
+ * به دیگران بدهید، همین کار را بکنید: یک بار اپ متا بسازید و مقادیرش را موقع
+ * بیلد بدهید تا کاربر هیچ تنظیمی نبیند.
+ *
+ *   IG_APP_ID=... IG_APP_SECRET=... IG_REDIRECT_URI=... npm run pack:win
+ *
+ * ⚠️ هشدار امنیتی که باید بدانید: App Secret داخل فایل اجرایی قابل استخراج است.
+ * کسی که آن را دربیاورد می‌تواند به نام اپ شما درخواست اجازه بفرستد. برای ابزار
+ * شخصی یا جمع کوچک قابل قبول است؛ برای انتشار عمومی، سرویس‌های آنلاین این تبادل
+ * را روی سرور خودشان انجام می‌دهند تا Secret هرگز بیرون نرود.
+ */
+const BUNDLED = {
+  appId: process.env.IG_APP_ID ?? '',
+  appSecret: process.env.IG_APP_SECRET ?? '',
+  redirectUri: process.env.IG_REDIRECT_URI ?? ''
+}
+
+export function bundledCredentials(): { appId: string; appSecret: string; redirectUri: string } | null {
+  if (BUNDLED.appId && BUNDLED.appSecret && BUNDLED.redirectUri) return { ...BUNDLED }
+  return null
+}
 
 export interface OAuthResult {
   accessToken: string
@@ -49,11 +92,7 @@ export class OAuthError extends Error {
 
 /** مرحله‌ی ۱: پنجره را باز کن و کد یک‌بارمصرف را بگیر */
 function captureAuthCode(appId: string, redirectUri: string, parent?: BrowserWindow): Promise<string> {
-  const url = new URL(AUTH_HOST)
-  url.searchParams.set('client_id', appId)
-  url.searchParams.set('redirect_uri', redirectUri)
-  url.searchParams.set('response_type', 'code')
-  url.searchParams.set('scope', REQUIRED_SCOPES.join(','))
+  const url = new URL(buildAuthUrl())
 
   return new Promise<string>((resolve, reject) => {
     const win = new BrowserWindow({
@@ -212,8 +251,15 @@ async function fetchProfile(token: string): Promise<{
   }
 }
 
-/** جریان کامل اتصال حساب */
-export async function connectInstagramAccount(parent?: BrowserWindow): Promise<OAuthResult> {
+/**
+ * اعتبارنامه‌ی مؤثر: اول آنچه در بیلد جاسازی شده، بعد آنچه کاربر وارد کرده.
+ * این ترتیب یعنی اگر اپ را با اعتبارنامه‌ی خودتان بیلد کنید، کاربر هیچ تنظیمی
+ * نمی‌بیند؛ و اگر نکنید، همان مسیر دستی قبلی سر جایش است.
+ */
+export function resolveMetaConfig(): { appId: string; appSecret: string; redirectUri: string } {
+  const bundled = bundledCredentials()
+  if (bundled) return bundled
+
   const cfg = secureStore().getMetaApp()
   if (!cfg.appId || !cfg.appSecret || !cfg.redirectUri) {
     throw new OAuthError(
@@ -221,6 +267,48 @@ export async function connectInstagramAccount(parent?: BrowserWindow): Promise<O
       'در تنظیمات، App ID و App Secret و Redirect URI را از داشبورد developers.facebook.com وارد کنید'
     )
   }
+  return { appId: cfg.appId, appSecret: cfg.appSecret, redirectUri: cfg.redirectUri }
+}
+
+/** ساخت لینک اجازه — هم پنجره‌ی داخلی و هم مسیر مرورگر از همین استفاده می‌کنند */
+export function buildAuthUrl(opts: { withInsights?: boolean } = {}): string {
+  const cfg = resolveMetaConfig()
+  const url = new URL(AUTH_HOST)
+  url.searchParams.set('client_id', cfg.appId)
+  url.searchParams.set('redirect_uri', cfg.redirectUri)
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('scope', scopesFor(opts.withInsights !== false).join(','))
+  url.searchParams.set('state', 'igsuite')
+  return url.toString()
+}
+
+/**
+ * تکمیل اتصال با کدی که کاربر از مرورگر خودش برگردانده.
+ * از همان مراحل ۲ تا ۴ جریان معمولی استفاده می‌کند — فقط مرحله‌ی گرفتن کد
+ * به‌جای پنجره‌ی داخلی، دستی انجام شده.
+ */
+export async function completeOAuthWithCode(code: string): Promise<OAuthResult> {
+  const cfg = resolveMetaConfig()
+  const short = await exchangeCode(cfg.appId, cfg.appSecret, cfg.redirectUri, code)
+  const long = await exchangeForLongLived(cfg.appSecret, short.token)
+  const profile = await fetchProfile(long.token)
+
+  return {
+    accessToken: long.token,
+    expiresAt: Date.now() + long.expiresIn * 1000,
+    igUserId: profile.igUserId || short.userId,
+    username: profile.username,
+    name: profile.name,
+    profilePicture: profile.profilePicture,
+    followersCount: profile.followersCount,
+    followsCount: profile.followsCount,
+    mediaCount: profile.mediaCount
+  }
+}
+
+/** جریان کامل اتصال حساب — پنجره‌ی داخل اپ */
+export async function connectInstagramAccount(parent?: BrowserWindow): Promise<OAuthResult> {
+  const cfg = resolveMetaConfig()
 
   const code = await captureAuthCode(cfg.appId, cfg.redirectUri, parent)
   const short = await exchangeCode(cfg.appId, cfg.appSecret, cfg.redirectUri, code)

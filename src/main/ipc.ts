@@ -26,7 +26,16 @@ import {
 } from '../core/automations'
 import { pollFollowers, pollMedia, pollerScheduler, syncFollowing } from '../core/pollers'
 import { IPC_CHANNELS, type ApiResult, type IpcApi } from '../shared/ipc'
-import { connectInstagramAccount, refreshLongLivedToken, TOKEN_REFRESH_THRESHOLD_MS } from './auth/oauth'
+import {
+  buildAuthUrl,
+  bundledCredentials,
+  completeOAuthWithCode,
+  connectInstagramAccount,
+  refreshLongLivedToken,
+  resolveMetaConfig,
+  TOKEN_REFRESH_THRESHOLD_MS
+} from './auth/oauth'
+import { extractAuthCode } from './auth/oauth-manual'
 import { clearWebLoginSession, loginWithInstagramWindow } from './auth/web-login'
 import {
   buildCookiesFromSessionId,
@@ -157,6 +166,50 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         level: 'success',
         category: 'auth',
         message: 'حساب @' + finalProfile.username + ' با ورود ساده وصل شد'
+      })
+      return ok(account)
+    },
+
+    getAuthUrl: () => {
+      const cfg = resolveMetaConfig()
+      return ok({
+        url: buildAuthUrl(),
+        bundled: bundledCredentials() !== null,
+        redirectUri: cfg.redirectUri
+      })
+    },
+
+    /**
+     * تکمیل اتصال رسمی از مرورگر کاربر.
+     *
+     * چرا این مسیر لازم است: جریان معمولی صفحه‌ی ورود را داخل اپ باز می‌کند،
+     * که یعنی *شبکه‌ی اپ* باید به اینستاگرام برسد. پشت فیلتر معمولا نمی‌رسد.
+     * اینجا کاربر لینک را در مرورگر خودش باز می‌کند و فقط آدرس بازگشت را
+     * برمی‌گرداند — همان کاری که سرویس‌های آنلاین با سرورشان انجام می‌دهند.
+     */
+    connectWithAuthCode: async (p: { codeOrUrl: string }) => {
+      const code = extractAuthCode(p.codeOrUrl)
+      const res = await completeOAuthWithCode(code)
+
+      const account = accountsRepo.upsert({
+        ig_user_id: res.igUserId,
+        username: res.username,
+        name: res.name ?? null,
+        profile_picture_url: res.profilePicture ?? null,
+        engine: 'graph',
+        followers_count: res.followersCount,
+        follows_count: res.followsCount,
+        media_count: res.mediaCount,
+        token_expires_at: res.expiresAt
+      })
+      secureStore().setToken(account.id, res.accessToken, res.expiresAt)
+      engines().graph.registerIgUserId(account.id, res.igUserId)
+      accountsRepo.snapshot(account.id, res.followersCount, res.followsCount, res.mediaCount)
+      logRepo.add({
+        account_id: account.id,
+        level: 'success',
+        category: 'auth',
+        message: 'حساب @' + res.username + ' با API رسمی (از مرورگر) وصل شد'
       })
       return ok(account)
     },

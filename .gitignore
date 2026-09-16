@@ -13,3 +13,5 @@ data/
 scratch*
 .test-*.cjs
 release/
+
+*.tsbuildinfo

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AccountRow } from '../../shared/types'
+import { BrowserOAuthWizard } from '../components/BrowserOAuthWizard'
 import { Card, EmptyState, Field, Modal, Notice } from '../components/ui'
 import { call, callRaw, fmtDate, fmtFull, toasts } from '../lib/api'
 
@@ -14,6 +15,7 @@ export function AccountsPage({
   const [webBusy, setWebBusy] = useState(false)
   const [sessionModal, setSessionModal] = useState(false)
   const [sidModal, setSidModal] = useState(false)
+  const [oauthWizard, setOauthWizard] = useState(false)
   const [sessionAvailable, setSessionAvailable] = useState({ enabled: false, libraryAvailable: false })
 
   /**
@@ -79,8 +81,8 @@ export function AccountsPage({
             <button className="btn-ghost btn-sm" onClick={() => setSidModal(true)}>
               + اتصال با کد نشست
             </button>
-            <button className="btn-ghost btn-sm" disabled={connecting} onClick={() => void connectGraph()}>
-              {connecting ? 'در حال اتصال…' : '+ API رسمی'}
+            <button className="btn-ghost btn-sm" onClick={() => setOauthWizard(true)}>
+              + API رسمی
             </button>
           </div>
         }
@@ -181,7 +183,8 @@ export function AccountsPage({
               <li>✕ لیست فالوور و دایرکت انبوه نمی‌دهد</li>
             </ul>
             <p className="mt-2 text-[11px] text-slate-500">
-              نیازمند ساخت یک اپ در داشبورد متا — راهنمای گام‌به‌گام در تنظیمات.
+              نیازمند یک اپ در داشبورد متا. اتصالش از مرورگر خودتان انجام می‌شود، پس پشت فیلتر هم
+              کار می‌کند.
             </p>
           </div>
         </div>
@@ -228,6 +231,20 @@ export function AccountsPage({
           </div>
         </details>
       </Card>
+
+      {oauthWizard && (
+        <BrowserOAuthWizard
+          onClose={() => setOauthWizard(false)}
+          onDone={() => {
+            setOauthWizard(false)
+            onChanged()
+          }}
+          onTryInApp={() => {
+            setOauthWizard(false)
+            void connectGraph()
+          }}
+        />
+      )}
 
       {sidModal && (
         <SessionIdModal

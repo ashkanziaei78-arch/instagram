@@ -10,7 +10,7 @@
  *
  * اجرا: npm run test:web
  */
-import { WebEngine, type WebSessionData } from '../src/core/engine/web-engine'
+import { WebEngine, type WebSessionData, type WebOrigin } from '../src/core/engine/web-engine'
 import { AuthError, RateLimitError } from '../src/core/engine/types'
 import { initDb, closeDb } from '../src/core/db/index'
 import { existsSync, rmSync } from 'node:fs'
@@ -37,11 +37,16 @@ function check(name: string, cond: boolean, extra?: unknown): void {
 }
 
 /* ─────────── ذخیره‌گاه ساختگی ─────────── */
-const mem = new Map<number, string>()
+/** کلید: `<accountId>:<origin>` — همان شکلی که انبار واقعی استفاده می‌کند */
+const mem = new Map<string, string>()
+const key = (id: number, origin: WebOrigin): string => id + ':' + origin
 const store = {
-  load: (id: number): string | null => mem.get(id) ?? null,
-  save: (id: number, s: string): void => void mem.set(id, s),
-  clear: (id: number): void => void mem.delete(id)
+  load: (id: number, origin: WebOrigin): string | null => mem.get(key(id, origin)) ?? null,
+  save: (id: number, origin: WebOrigin, s: string): void => void mem.set(key(id, origin), s),
+  clear: (id: number, origin?: WebOrigin): void => {
+    if (origin) mem.delete(key(id, origin))
+    else for (const o of ['window', 'sessionid'] as WebOrigin[]) mem.delete(key(id, o))
+  }
 }
 
 const SESSION: WebSessionData = {
@@ -97,11 +102,21 @@ async function run(): Promise<void> {
   check('بدون نشست، وصل نیست', engine.isConnected(1) === false)
   engine.attach(1, SESSION)
   check('بعد از attach وصل است', engine.isConnected(1) === true)
-  check('نشست در ذخیره‌گاه رفت', mem.has(1))
+  check('نشست در اسلات window ذخیره‌گاه رفت', mem.has(key(1, 'window')))
   const fresh = new WebEngine(store)
   check('موتور تازه نشست را از ذخیره‌گاه می‌خواند', fresh.isConnected(1) === true)
+
+  // هر دو مسیر کنار هم زندگی می‌کنند — این همان چیزی است که قبلا ممکن نبود
+  engine.attach(1, { ...SESSION, origin: 'sessionid' })
+  check('هر دو مسیر هم‌زمان وصل‌اند', engine.connectedOrigins(1).length === 2)
+  check('اسلات‌ها جدا ذخیره شده‌اند', mem.has(key(1, 'window')) && mem.has(key(1, 'sessionid')))
+
+  // قطع یک مسیر نباید دیگری را ببرد
+  engine.detach(1, 'sessionid')
+  check('قطع یک مسیر، دیگری را نمی‌برد', engine.connectedOrigins(1).join() === 'window')
+
   engine.detach(1)
-  check('بعد از detach وصل نیست', engine.isConnected(1) === false)
+  check('بعد از detach کامل وصل نیست', engine.isConnected(1) === false)
   engine.attach(1, SESSION)
 
   console.log('\n=== 2. هدرهای درخواست ===')
@@ -415,9 +430,70 @@ async function run(): Promise<void> {
   check('فرستنده', comments[0].from_user_id === 'u9' && comments[0].from_username === 'ali')
   check('شناسه‌ی پست همراهش است', comments[0].media_id === 'm1')
 
-  console.log('\n=== 12. نشست خراب ===')
+  console.log('\n=== 12. جابه‌جایی خودکار بین دو مسیر اتصال ===')
+  {
+    const fo = new WebEngine(store)
+    const ACC = 77
+    // ترتیب مهم است: آخرین اتصال ترجیح می‌گیرد، پس window اول امتحان می‌شود
+    fo.attach(ACC, {
+      ...SESSION,
+      cookies: { ...SESSION.cookies, sessionid: 'SESSION_FROM_BROWSER' },
+      origin: 'sessionid'
+    })
+    fo.attach(ACC, { ...SESSION, origin: 'window' })
+
+    // مسیر ترجیحی باطل شده، مسیر دوم سالم است
+    captured = []
+    responseQueue.length = 0
+    responseQueue.push({ status: 401, body: JSON.stringify({ message: 'login_required' }) })
+    responseQueue.push({ status: 200, body: JSON.stringify({ comments: [] }) })
+
+    let threw = false
+    try {
+      await fo.listComments(ACC, 'm1')
+    } catch {
+      threw = true
+    }
+    check('وقتی یک مسیر باطل است، درخواست شکست نمی‌خورد', threw === false)
+    check('هر دو مسیر امتحان شدند', captured.length === 2)
+    check(
+      'تلاش دوم با کوکی مسیر دیگر بود',
+      captured[1].headers.Cookie.includes('SESSION_FROM_BROWSER')
+    )
+    check('اعتبارنامه‌ی باطل پاک نشد', fo.connectedOrigins(ACC).length === 2)
+
+    // حالا باید مستقیم سراغ مسیری برود که جواب داد — نه اینکه هر بار باطل را دوباره امتحان کند
+    captured = []
+    responseQueue.length = 0
+    responseQueue.push({ status: 200, body: JSON.stringify({ comments: [] }) })
+    await fo.listComments(ACC, 'm1')
+    check('دفعه‌ی بعد فقط یک درخواست زد', captured.length === 1)
+    check(
+      'و از همان مسیری که جواب داده بود',
+      captured[0].headers.Cookie.includes('SESSION_FROM_BROWSER')
+    )
+
+    // وقتی هر دو باطل‌اند، خطا باید صریح باشد
+    captured = []
+    responseQueue.length = 0
+    responseQueue.push({ status: 401, body: JSON.stringify({ message: 'login_required' }) })
+    responseQueue.push({ status: 401, body: JSON.stringify({ message: 'login_required' }) })
+    try {
+      await fo.listComments(ACC, 'm1')
+      check('باطل بودن هر دو مسیر خطا می‌دهد', false)
+    } catch (e) {
+      check('باطل بودن هر دو مسیر خطا می‌دهد', e instanceof AuthError)
+      check(
+        'خطا می‌گوید هیچ مسیری نمانده',
+        (e as Error).message.includes('هیچ‌کدام از روش‌های اتصال')
+      )
+    }
+    fo.detach(ACC)
+  }
+
+  console.log('\n=== 13. نشست خراب ===')
   const broken = new WebEngine({
-    load: () => '{ not json',
+    load: (_id, origin) => (origin === 'window' ? '{ not json' : null),
     save: () => undefined,
     clear: () => undefined
   })
@@ -429,7 +505,10 @@ async function run(): Promise<void> {
   }
 
   const noSessionId = new WebEngine({
-    load: () => JSON.stringify({ cookies: { ds_user_id: '1' }, userAgent: 'x' }),
+    load: (_id, origin) =>
+      origin === 'window'
+        ? JSON.stringify({ cookies: { ds_user_id: '1' }, userAgent: 'x' })
+        : null,
     save: () => undefined,
     clear: () => undefined
   })

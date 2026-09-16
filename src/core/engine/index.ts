@@ -64,7 +64,7 @@ export class EngineManager {
         throw new UnsupportedCapabilityError(
           cap,
           'graph',
-          'این قابلیت در API رسمی وجود ندارد. با دکمه‌ی «ورود ساده با اینستاگرام» در صفحه‌ی حساب‌ها وصل شوید.'
+          'این قابلیت در API رسمی وجود ندارد. در صفحه‌ی حساب‌ها دکمه‌ی «اتصال حساب» را بزنید و «ورود ساده» یا «کد نشست» را وصل کنید.'
         )
       }
       const connected = candidates.find((e) => e.isConnected(accountId))
@@ -72,7 +72,7 @@ export class EngineManager {
         throw new UnsupportedCapabilityError(
           cap,
           'session',
-          'این حساب با روش ساده وصل نشده. از صفحه‌ی حساب‌ها دکمه‌ی «ورود ساده با اینستاگرام» را بزنید.'
+          'این حساب با روش ساده وصل نشده. در صفحه‌ی حساب‌ها «اتصال حساب» را باز کنید و «ورود ساده» یا «کد نشست» را وصل کنید.'
         )
       }
       return connected
@@ -155,7 +155,7 @@ export class EngineManager {
         connected: simpleConnected,
         capabilities: this.web.capabilities,
         detail: !this.sessionEnabled
-          ? 'وصل نیست — با «ورود ساده با اینستاگرام» وصل شوید'
+          ? 'وصل نیست — از «اتصال حساب» روش «ورود ساده» یا «کد نشست» را وصل کنید'
           : simpleConnected
             ? (webConnected ? 'وصل است (ورود ساده)' : 'وصل است (نام کاربری و رمز)') +
               ' — لیست فالوور، فالوور جدید و دایرکت انبوه فعال'
@@ -181,6 +181,6 @@ export * from './types'
 export { GraphEngine } from './graph-engine'
 export { SessionEngine } from './session-engine'
 export { WebEngine } from './web-engine'
-export type { WebSessionStore, WebSessionData } from './web-engine'
+export type { WebSessionStore, WebSessionData, WebOrigin } from './web-engine'
 export type { SessionStore, LoginChallenge } from './session-engine'
 export type { TokenProvider } from './graph-engine'

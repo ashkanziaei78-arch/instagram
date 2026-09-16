@@ -7,6 +7,7 @@
  */
 import type {
   AccountRow,
+  AccountWithLinks,
   ActivityLogRow,
   Broadcast,
   BroadcastTargetFilter,
@@ -64,7 +65,7 @@ export interface ApiResult<T = void> {
 /** امضای همه‌ی متدهای قابل‌صدازدن از renderer */
 export interface IpcApi {
   /* حساب‌ها */
-  listAccounts(): Promise<ApiResult<AccountRow[]>>
+  listAccounts(): Promise<ApiResult<AccountWithLinks[]>>
   connectGraphAccount(): Promise<ApiResult<AccountRow>>
   /** ورود ساده: پنجره‌ی خود اینستاگرام باز می‌شود و کوکی نشست برداشته می‌شود */
   webLogin(): Promise<ApiResult<AccountRow>>

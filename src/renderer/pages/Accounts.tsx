@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import type { AccountRow } from '../../shared/types'
+import type { AccountRow, AccountWithLinks, LinkMethod } from '../../shared/types'
 import { BrowserOAuthWizard } from '../components/BrowserOAuthWizard'
+import { ConnectHub, LinkChips, METHODS, WorkedExample } from '../components/ConnectHub'
 import { Card, EmptyState, Field, Modal, Notice } from '../components/ui'
 import { call, callRaw, fmtDate, fmtFull, toasts } from '../lib/api'
 
@@ -8,7 +9,7 @@ export function AccountsPage({
   accounts,
   onChanged
 }: {
-  accounts: AccountRow[]
+  accounts: AccountWithLinks[]
   onChanged: () => void
 }): JSX.Element {
   const [connecting, setConnecting] = useState(false)
@@ -16,7 +17,24 @@ export function AccountsPage({
   const [sessionModal, setSessionModal] = useState(false)
   const [sidModal, setSidModal] = useState(false)
   const [oauthWizard, setOauthWizard] = useState(false)
+  const [hub, setHub] = useState(false)
   const [sessionAvailable, setSessionAvailable] = useState({ enabled: false, libraryAvailable: false })
+
+  /**
+   * انتخاب یک روش از مرکز اتصال.
+   *
+   * مرکز باز می‌ماند: بعد از وصل‌شدن یک روش، کاربر باید بقیه را هم ببیند —
+   * همان لحظه‌ای که انگیزه‌اش را دارد. بستنِ پنجره یعنی دو روش دیگر احتمالا
+   * هرگز وصل نمی‌شوند.
+   */
+  const pickMethod = (m: LinkMethod): void => {
+    if (m === 'simple') void connectWeb()
+    else if (m === 'sessionid') setSidModal(true)
+    else setOauthWizard(true)
+  }
+
+  /** حسابی که کمترین اتصال را دارد — همان که باید به کاربر یادآوری شود */
+  const incomplete = accounts.find((a) => METHODS.some((m) => !a.links[m.id]))
 
   /**
    * ورود ساده. هیچ تنظیم قبلی لازم نیست — پنجره‌ی خود اینستاگرام باز می‌شود.
@@ -53,7 +71,7 @@ export function AccountsPage({
     }
   }
 
-  const refresh = async (a: AccountRow): Promise<void> => {
+  const refresh = async (a: AccountWithLinks): Promise<void> => {
     const r = await call('refreshAccount', { accountId: a.id })
     if (r) {
       toasts.push('success', 'اطلاعات @' + a.username + ' به‌روز شد')
@@ -61,7 +79,7 @@ export function AccountsPage({
     }
   }
 
-  const remove = async (a: AccountRow): Promise<void> => {
+  const remove = async (a: AccountWithLinks): Promise<void> => {
     if (!confirm('حساب @' + a.username + ' و همه‌ی قوانین و داده‌هایش حذف شود؟')) return
     await call('removeAccount', { accountId: a.id })
     toasts.push('info', 'حساب حذف شد')
@@ -74,24 +92,16 @@ export function AccountsPage({
         title="حساب‌های وصل‌شده"
         subtitle="می‌توانید چند حساب داشته باشید؛ قوانین و آمار هر حساب جداست"
         action={
-          <div className="flex gap-2">
-            <button className="btn-primary btn-sm" disabled={webBusy} onClick={() => void connectWeb()}>
-              {webBusy ? 'در انتظار ورود…' : '+ ورود ساده با اینستاگرام'}
-            </button>
-            <button className="btn-ghost btn-sm" onClick={() => setSidModal(true)}>
-              + اتصال با کد نشست
-            </button>
-            <button className="btn-ghost btn-sm" onClick={() => setOauthWizard(true)}>
-              + API رسمی
-            </button>
-          </div>
+          <button className="btn-primary btn-sm" onClick={() => setHub(true)}>
+            + اتصال حساب
+          </button>
         }
       >
         {accounts.length === 0 ? (
           <EmptyState
             icon="◎"
             title="هیچ حسابی وصل نیست"
-            body="ساده‌ترین راه: دکمه‌ی «ورود ساده با اینستاگرام». پنجره‌ی خود اینستاگرام باز می‌شود، وارد می‌شوید، تمام. هیچ تنظیم دیگری لازم نیست."
+            body="دکمه‌ی «اتصال حساب» را بزنید. سه راه وجود دارد و پنجره‌ای که باز می‌شود می‌گوید هرکدام چه کاری را ممکن می‌کند — ساده‌ترینشان یک کلیک است."
           />
         ) : (
           <div className="space-y-3">
@@ -118,13 +128,14 @@ export function AccountsPage({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium text-slate-100">@{a.username}</p>
-                      <span className={a.engine === 'graph' ? 'chip-ok' : 'chip-warn'}>
-                        {a.engine === 'graph' ? 'API رسمی' : 'موتور Session'}
-                      </span>
                       {a.status !== 'active' && <span className="chip-err">{a.status}</span>}
                       {expiringSoon && <span className="chip-warn">توکن نزدیک انقضا</span>}
                     </div>
-                    <p className="tabular mt-1 text-xs text-slate-500">
+                    {/* سه راه اتصال، هر سه دیده می‌شوند — نه فقط آخرینی که وصل شده */}
+                    <div className="mt-1.5">
+                      <LinkChips links={a.links} />
+                    </div>
+                    <p className="tabular mt-1.5 text-xs text-slate-500">
                       {fmtFull(a.followers_count)} فالوور · {fmtFull(a.media_count)} پست
                       {a.token_expires_at && ' · توکن تا ' + fmtDate(a.token_expires_at)}
                     </p>
@@ -134,6 +145,9 @@ export function AccountsPage({
                   </div>
 
                   <div className="flex gap-1.5">
+                    <button className="btn-ghost btn-sm" onClick={() => setHub(true)}>
+                      اتصال‌ها
+                    </button>
                     <button className="btn-ghost btn-sm" onClick={() => void refresh(a)}>
                       به‌روزرسانی
                     </button>
@@ -148,52 +162,67 @@ export function AccountsPage({
         )}
       </Card>
 
-      <Card title="کدام روش اتصال؟" subtitle="می‌توانید هر دو را هم‌زمان وصل کنید — اپ برای هر کار بهترین را انتخاب می‌کند">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-lg border border-fuchsia-500/25 bg-fuchsia-500/[0.05] p-3.5">
-            <div className="mb-2 flex items-center gap-2">
-              <p className="text-sm font-semibold text-fuchsia-200">ورود ساده با اینستاگرام</p>
-              <span className="chip-info">ساده‌ترین</span>
-            </div>
-            <ul className="space-y-1 text-[11px] leading-relaxed text-slate-300">
-              <li>✓ هیچ تنظیمی لازم نیست — فقط یک کلیک</li>
-              <li>✓ رمز شما وارد این اپ نمی‌شود</li>
-              <li>✓ دو مرحله‌ای را خود اینستاگرام مدیریت می‌کند</li>
-              <li>✓ لیست فالوور، فالوور جدید و دایرکت انبوه</li>
-              <li>✓ حساب لازم نیست بیزنسی باشد</li>
-              <li>✕ رسمی نیست — ریسک محدود شدن حساب دارد</li>
-              <li>✕ آمار ریچ و سیو نمی‌دهد</li>
-            </ul>
-            <p className="mt-2 text-[11px] text-slate-500">
-              پنجره‌ی خود اینستاگرام باز می‌شود، دقیقاً مثل ورود در مرورگر.
-            </p>
+      <Card
+        title="کدام روش اتصال؟"
+        subtitle="هیچ‌کدام جای دیگری را نمی‌گیرد — هرکدام قابلیت متفاوتی را روشن می‌کند"
+      >
+        {incomplete && (
+          <div className="mb-4">
+            <Notice tone="warn" title="بخشی از قابلیت‌ها هنوز خاموش است">
+              @{incomplete.username} فقط با{' '}
+              {METHODS.filter((m) => incomplete.links[m.id])
+                .map((m) => m.title)
+                .join(' و ') || 'هیچ روشی'}{' '}
+              وصل است. برای دیدن اینکه دقیقا چه چیزی کار نمی‌کند و وصل‌کردن بقیه،{' '}
+              <button
+                className="underline underline-offset-2 hover:text-amber-50"
+                onClick={() => setHub(true)}
+              >
+                مرکز اتصال
+              </button>{' '}
+              را باز کنید.
+            </Notice>
           </div>
+        )}
 
-          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3.5">
-            <div className="mb-2 flex items-center gap-2">
-              <p className="text-sm font-semibold text-emerald-200">API رسمی</p>
-              <span className="chip-ok">بی‌ریسک</span>
-            </div>
-            <ul className="space-y-1 text-[11px] leading-relaxed text-slate-300">
-              <li>✓ هیچ ریسکی برای حساب ندارد</li>
-              <li>✓ پاسخ خصوصی به کامنت (بهترین حالت کامنت‌به‌دایرکت)</li>
-              <li>✓ آمار دقیق: ویو، ریچ، سیو، اشتراک‌گذاری</li>
-              <li>✕ راه‌اندازی‌اش حدود ۱۰ دقیقه طول می‌کشد</li>
-              <li>✕ حساب باید بیزنسی یا کریتور باشد</li>
-              <li>✕ لیست فالوور و دایرکت انبوه نمی‌دهد</li>
-            </ul>
-            <p className="mt-2 text-[11px] text-slate-500">
-              نیازمند یک اپ در داشبورد متا. اتصالش از مرورگر خودتان انجام می‌شود، پس پشت فیلتر هم
-              کار می‌کند.
-            </p>
-          </div>
+        <div className="grid gap-2.5 md:grid-cols-3">
+          {METHODS.map((m) => {
+            const anyHas = accounts.some((a) => a.links[m.id])
+            return (
+              <div
+                key={m.id}
+                className={
+                  'rounded-lg border p-3.5 ' +
+                  (anyHas
+                    ? 'border-emerald-500/25 bg-emerald-500/[0.04]'
+                    : 'border-white/[0.08] bg-white/[0.02]')
+                }
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <p className="text-sm font-semibold text-slate-100">{m.title}</p>
+                  <span className={anyHas ? 'chip-ok' : 'chip-info'}>
+                    {anyHas ? 'وصل است' : m.badge}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-300">
+                  <span className="text-slate-400">روشن می‌کند:</span> {m.unlocks}
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                  <span className="text-slate-400">هزینه‌اش:</span> {m.cost}
+                </p>
+              </div>
+            )
+          })}
         </div>
 
-        <Notice tone="info" title="پیشنهاد عملی">
-          با <strong>ورود ساده</strong> شروع کنید تا همه‌چیز کار کند. بعداً اگر آمار دقیق یا
-          کامنت‌به‌دایرکتِ بی‌ریسک خواستید، همان حساب را با <strong>API رسمی</strong> هم وصل کنید —
-          اپ خودش برای هر کار موتور مناسب را انتخاب می‌کند.
-        </Notice>
+        {/* مثال با وضعیت واقعی حساب اول — تئوری به کار کسی نمی‌آید */}
+        <div className="mt-4">
+          <WorkedExample
+            links={
+              accounts[0]?.links ?? { simple: false, sessionid: false, official: false }
+            }
+          />
+        </div>
 
         <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-white/[0.07] px-3 py-2.5">
           <p className="text-[11px] leading-relaxed text-slate-400">
@@ -213,7 +242,7 @@ export function AccountsPage({
 
         <details className="mt-3">
           <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">
-            روش سوم: ورود با نام کاربری و رمز (توصیه نمی‌شود)
+            روش چهارم: ورود با نام کاربری و رمز (توصیه نمی‌شود)
           </summary>
           <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3">
             <p className="text-[11px] leading-relaxed text-slate-300">
@@ -231,6 +260,15 @@ export function AccountsPage({
           </div>
         </details>
       </Card>
+
+      {hub && (
+        <ConnectHub
+          accounts={accounts}
+          busy={webBusy ? 'simple' : connecting ? 'official' : null}
+          onClose={() => setHub(false)}
+          onPick={pickMethod}
+        />
+      )}
 
       {oauthWizard && (
         <BrowserOAuthWizard
@@ -363,7 +401,7 @@ function SessionLoginModal({
         <Notice tone="warn" title="این روش معمولاً کار نمی‌کند">
           کتابخانه‌ای که این مسیر استفاده می‌کند نسخه‌ی قدیمی اپ موبایل را اعلام می‌کند و اینستاگرام
           اغلب با پیام «Your version of Instagram is out of date» ردش می‌کند. اگر این خطا را گرفتید،
-          باگ اپ نیست — از دکمه‌ی «ورود ساده با اینستاگرام» استفاده کنید که این مشکل را ندارد.
+          باگ اپ نیست — از «اتصال حساب» روش «ورود ساده» را بزنید که این مشکل را ندارد.
         </Notice>
 
         <Notice tone="danger" title="قبل از ادامه بخوانید">

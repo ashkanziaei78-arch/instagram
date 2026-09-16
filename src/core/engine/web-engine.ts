@@ -36,16 +36,29 @@ import {
 const WEB_APP_ID = '936619743392459'
 const BASE = 'https://www.instagram.com'
 
+/**
+ * از کدام مسیر آمده. هر دو در نهایت همان کوکی‌ها را می‌دهند و از نظر موتور
+ * فرقی ندارند — ولی جدا نگه‌داشتنشان یعنی کاربر می‌تواند *هر دو* را وصل کند و
+ * اگر یکی باطل شد، موتور بی‌سروصدا سراغ دیگری برود.
+ */
+export type WebOrigin = 'window' | 'sessionid'
+
+/** ترتیب ترجیح وقتی هر دو موجودند. پنجره تازه‌تر است، پس اول امتحان می‌شود. */
+const ORIGIN_ORDER: WebOrigin[] = ['window', 'sessionid']
+
 export interface WebSessionData {
   cookies: Record<string, string>
   userAgent: string
+  /** نشست‌های ذخیره‌شده‌ی قدیمی این فیلد را ندارند، پس اختیاری است */
+  origin?: WebOrigin
 }
 
 /** ذخیره‌گاه نشست وب (همان انبار رمزنگاری‌شده‌ی main) */
 export interface WebSessionStore {
-  load(accountId: number): string | null
-  save(accountId: number, serialized: string): void
-  clear(accountId: number): void
+  load(accountId: number, origin: WebOrigin): string | null
+  save(accountId: number, origin: WebOrigin, serialized: string): void
+  /** بدون origin یعنی همه‌ی نشست‌های این حساب */
+  clear(accountId: number, origin?: WebOrigin): void
 }
 
 export class WebEngine implements IEngine {
@@ -62,7 +75,10 @@ export class WebEngine implements IEngine {
     'read_media'
   ]
 
-  private sessions = new Map<number, WebSessionData>()
+  /** نشست‌های زنده: برای هر حساب، حداکثر یکی به ازای هر مسیر اتصال */
+  private sessions = new Map<number, Map<WebOrigin, WebSessionData>>()
+  /** مسیری که آخرین بار جواب داد — دفعه‌ی بعد از همان شروع می‌کنیم */
+  private preferred = new Map<number, WebOrigin>()
   /** کش نام کاربری — برای اندپوینت‌هایی که با نام کار می‌کنند نه شناسه */
   private usernames = new Map<number, string>()
 
@@ -73,34 +89,93 @@ export class WebEngine implements IEngine {
   }
 
   isConnected(accountId: number): boolean {
-    return this.sessions.has(accountId) || this.store.load(accountId) !== null
+    return this.connectedOrigins(accountId).length > 0
+  }
+
+  /**
+   * کدام مسیرهای اتصال برای این حساب زنده‌اند — بدون پرت‌کردن خطا، چون UI این
+   * را در هر رندر صدا می‌زند و نبودِ نشست حالت عادی است نه خطا.
+   */
+  connectedOrigins(accountId: number): WebOrigin[] {
+    return ORIGIN_ORDER.filter((o) => this.tryLoad(accountId, o) !== null)
   }
 
   attach(accountId: number, data: WebSessionData): void {
-    this.sessions.set(accountId, data)
-    this.store.save(accountId, JSON.stringify(data))
+    const origin = data.origin ?? 'window'
+    const stored: WebSessionData = { ...data, origin }
+
+    const slots = this.sessions.get(accountId) ?? new Map<WebOrigin, WebSessionData>()
+    slots.set(origin, stored)
+    this.sessions.set(accountId, slots)
+    // تازه‌ترین اتصال، ترجیح بعدی است — کاربر همین الان آن را تأیید کرده
+    this.preferred.set(accountId, origin)
+    this.store.save(accountId, origin, JSON.stringify(stored))
   }
 
-  detach(accountId: number): void {
-    this.sessions.delete(accountId)
-    this.store.clear(accountId)
+  /** بدون origin یعنی قطع کامل حساب؛ با origin فقط همان یک مسیر */
+  detach(accountId: number, origin?: WebOrigin): void {
+    if (!origin) {
+      this.sessions.delete(accountId)
+      this.preferred.delete(accountId)
+      this.store.clear(accountId)
+      return
+    }
+    this.sessions.get(accountId)?.delete(origin)
+    if (this.preferred.get(accountId) === origin) this.preferred.delete(accountId)
+    this.store.clear(accountId, origin)
   }
 
-  private session(accountId: number): WebSessionData {
-    const cached = this.sessions.get(accountId)
+  /** خواندن یک اسلات از کش یا انبار. نشست خراب = انگار وجود ندارد. */
+  private tryLoad(accountId: number, origin: WebOrigin): WebSessionData | null {
+    const cached = this.sessions.get(accountId)?.get(origin)
     if (cached) return cached
 
-    const raw = this.store.load(accountId)
-    if (!raw) throw new AuthError('نشستی برای این حساب ذخیره نشده — دوباره وارد شوید')
+    const raw = this.store.load(accountId, origin)
+    if (!raw) return null
 
     try {
       const data = JSON.parse(raw) as WebSessionData
-      if (!data.cookies?.sessionid) throw new Error('sessionid ندارد')
-      this.sessions.set(accountId, data)
-      return data
+      if (!data.cookies?.sessionid) return null
+      const slots = this.sessions.get(accountId) ?? new Map<WebOrigin, WebSessionData>()
+      slots.set(origin, { ...data, origin })
+      this.sessions.set(accountId, slots)
+      return slots.get(origin)!
     } catch {
-      throw new AuthError('نشست ذخیره‌شده خراب است — دوباره وارد شوید')
+      return null
     }
+  }
+
+  /**
+   * مسیرهایی که باید امتحان شوند، به ترتیب: اول آنکه آخرین بار جواب داد.
+   *
+   * چرا ترتیب مهم است: هر درخواست اضافه به اینستاگرام هزینه‌ی سهمیه دارد. با
+   * چسبیدن به مسیری که کار می‌کند، نشست باطل فقط *یک بار* امتحان می‌شود نه در
+   * هر فراخوانی.
+   */
+  /** این مسیر جواب نداد — اگر مسیر دیگری هست، ترجیح را به آن بده */
+  private demote(accountId: number, origin: WebOrigin): void {
+    const other = this.connectedOrigins(accountId).find((o) => o !== origin)
+    if (other) this.preferred.set(accountId, other)
+  }
+
+  private candidates(accountId: number): WebOrigin[] {
+    const live = this.connectedOrigins(accountId)
+    const pref = this.preferred.get(accountId)
+    if (pref && live.includes(pref)) return [pref, ...live.filter((o) => o !== pref)]
+    return live
+  }
+
+  private session(accountId: number, origin: WebOrigin): WebSessionData {
+    const data = this.tryLoad(accountId, origin)
+    if (!data) throw new AuthError('نشستی برای این حساب ذخیره نشده — دوباره وارد شوید')
+    return data
+  }
+
+  /** نشست ترجیحی — برای جاهایی که فقط به محتوای کوکی نیاز است، نه به درخواست */
+  private activeSession(accountId: number): WebSessionData {
+    const [first] = this.candidates(accountId)
+    if (!first) throw new AuthError('نشستی برای این حساب ذخیره نشده — دوباره وارد شوید')
+    return this.session(accountId, first)
   }
 
   private cookieHeader(cookies: Record<string, string>): string {
@@ -127,7 +202,47 @@ export class WebEngine implements IEngine {
       context: string
     }
   ): Promise<T> {
-    const s = this.session(accountId)
+    const tries = this.candidates(accountId)
+    if (tries.length === 0) {
+      throw new AuthError('نشستی برای این حساب ذخیره نشده — دوباره وارد شوید')
+    }
+
+    let lastAuthError: AuthError | null = null
+    for (const origin of tries) {
+      try {
+        const out = await this.requestWith<T>(accountId, origin, path, opts)
+        this.preferred.set(accountId, origin)
+        return out
+      } catch (e) {
+        // فقط روی «نشست باطل» به مسیر بعدی می‌رویم. محدودیت نرخ یا خطای شبکه
+        // با عوض‌کردن کوکی درست نمی‌شود و تلاش دوباره فقط سهمیه را می‌سوزاند.
+        if (!(e instanceof AuthError)) throw e
+        lastAuthError = e
+        // اعتبارنامه را *پاک نمی‌کنیم*: یک ۴۰۱ گذرا نباید کاری کند که کاربر
+        // مجبور به اتصال دوباره شود. فقط ترجیح را به مسیر دیگر می‌دهیم، پس
+        // درخواست بعدی مستقیم سراغ همانی می‌رود که جواب داد.
+        this.demote(accountId, origin)
+      }
+    }
+
+    throw new AuthError(
+      (lastAuthError?.message ?? opts.context + ': نشست معتبر نیست') +
+        ' — هیچ‌کدام از روش‌های اتصال این حساب دیگر معتبر نیست، دوباره وصل شوید'
+    )
+  }
+
+  private async requestWith<T>(
+    accountId: number,
+    origin: WebOrigin,
+    path: string,
+    opts: {
+      method?: 'GET' | 'POST'
+      query?: Record<string, string>
+      form?: Record<string, string>
+      context: string
+    }
+  ): Promise<T> {
+    const s = this.session(accountId, origin)
     const url = new URL(path.startsWith('http') ? path : BASE + path)
     for (const [k, v] of Object.entries(opts.query ?? {})) url.searchParams.set(k, v)
 
@@ -246,8 +361,12 @@ export class WebEngine implements IEngine {
       throw new AuthError('کوکی ds_user_id موجود نیست — ورود کامل نشده است')
     }
 
+    // شناسه‌ی منفی یعنی «حساب موقت» — هنوز در دیتابیس ردیفی ندارد چون داریم
+    // همین الان تأییدش می‌کنیم. در finally پاک می‌شود.
     const tempId = -1
-    this.sessions.set(tempId, data)
+    const tempOrigin: WebOrigin = data.origin ?? 'window'
+    this.sessions.set(tempId, new Map([[tempOrigin, { ...data, origin: tempOrigin }]]))
+    this.preferred.set(tempId, tempOrigin)
     const failures: string[] = []
 
     type UserShape = {
@@ -346,16 +465,16 @@ export class WebEngine implements IEngine {
       )
     } finally {
       this.sessions.delete(tempId)
+      this.preferred.delete(tempId)
     }
   }
 
   async getProfile(accountId: number): Promise<IgProfile> {
-    const s = this.session(accountId)
-    return this.verifyAndGetProfile(s)
+    return this.verifyAndGetProfile(this.activeSession(accountId))
   }
 
   private pk(accountId: number): string {
-    const pk = this.session(accountId).cookies.ds_user_id
+    const pk = this.activeSession(accountId).cookies.ds_user_id
     if (!pk) throw new AuthError('شناسه‌ی کاربر در نشست موجود نیست')
     return pk
   }

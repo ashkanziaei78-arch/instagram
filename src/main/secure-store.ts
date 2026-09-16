@@ -1,4 +1,5 @@
 import { app, safeStorage } from 'electron'
+import type { WebOrigin } from '../core/engine/web-engine'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -7,7 +8,7 @@ interface VaultShape {
   tokens: Record<string, { value: string; expiresAt: number | null }>
   /** نشست‌های موتور Session (سریال‌شده‌ی instagram-private-api) */
   sessions: Record<string, string>
-  /** نشست‌های موتور وب (کوکی‌های ورود ساده) */
+  /** نشست‌های موتور وب، با کلید `<accountId>:<origin>` */
   webSessions: Record<string, string>
   /** تنظیمات اپ متا */
   metaApp: { appId?: string; appSecret?: string; redirectUri?: string; webhookVerifyToken?: string }
@@ -112,21 +113,49 @@ class SecureStore {
     this.write()
   }
 
-  /* ─────────── نشست موتور وب (ورود ساده) ─────────── */
+  /* ─────────── نشست‌های موتور وب (ورود ساده / کد نشست) ─────────── */
 
-  getWebSession(accountId: number): string | null {
-    return this.read().webSessions[String(accountId)] ?? null
+  /**
+   * هر حساب برای هر مسیر اتصال یک اسلات جدا دارد: کلید `<accountId>:<origin>`.
+   *
+   * چرا جدا و نه یکی: اگر هر دو مسیر روی یک کلید بنویسند، وصل‌کردن دومی اولی
+   * را پاک می‌کند و کاربر هرگز نمی‌تواند هر دو را هم‌زمان داشته باشد. جدا بودن
+   * یعنی وقتی یکی باطل شد، موتور بی‌سروصدا سراغ دیگری می‌رود.
+   */
+  private webKey(accountId: number, origin: WebOrigin): string {
+    return accountId + ':' + origin
   }
 
-  setWebSession(accountId: number, serialized: string): void {
+  getWebSession(accountId: number, origin: WebOrigin): string | null {
     const v = this.read()
-    v.webSessions[String(accountId)] = serialized
+    const direct = v.webSessions[this.webKey(accountId, origin)]
+    if (direct) return direct
+
+    // مهاجرت نرم: نسخه‌های قبلی با کلید بدون origin ذخیره می‌کردند. آن نشست‌ها
+    // فقط از پنجره‌ی ورود می‌آمدند، پس همان اسلات را می‌گیرند.
+    if (origin === 'window') return v.webSessions[String(accountId)] ?? null
+    return null
+  }
+
+  setWebSession(accountId: number, origin: WebOrigin, serialized: string): void {
+    const v = this.read()
+    v.webSessions[this.webKey(accountId, origin)] = serialized
+    if (origin === 'window') delete v.webSessions[String(accountId)]
     this.write()
   }
 
-  clearWebSession(accountId: number): void {
+  /** بدون origin یعنی همه‌ی اسلات‌های این حساب */
+  clearWebSession(accountId: number, origin?: WebOrigin): void {
     const v = this.read()
-    delete v.webSessions[String(accountId)]
+    if (origin) {
+      delete v.webSessions[this.webKey(accountId, origin)]
+      if (origin === 'window') delete v.webSessions[String(accountId)]
+    } else {
+      delete v.webSessions[String(accountId)]
+      for (const o of ['window', 'sessionid'] as WebOrigin[]) {
+        delete v.webSessions[this.webKey(accountId, o)]
+      }
+    }
     this.write()
   }
 

@@ -94,11 +94,19 @@ export const accountsRepo = {
            username=excluded.username,
            name=excluded.name,
            profile_picture_url=excluded.profile_picture_url,
-           engine=excluded.engine,
+           -- «ارتقا بله، تنزل خیر»: اگر حساب از قبل با API رسمی وصل بوده و حالا
+           -- روش ساده هم اضافه می‌شود، نباید برچسبش به session برگردد. هر دو
+           -- اتصال کنار هم زنده می‌مانند (اعتبارنامه‌هایشان جداست) و این ستون
+           -- فقط بهترینِ موجود را نشان می‌دهد.
+           engine=CASE WHEN accounts.engine='graph' OR excluded.engine='graph'
+                       THEN 'graph' ELSE excluded.engine END,
            followers_count=excluded.followers_count,
            follows_count=excluded.follows_count,
            media_count=excluded.media_count,
-           token_expires_at=excluded.token_expires_at,
+           -- به همان دلیل: اتصال ساده تاریخ انقضای توکن رسمی را ندارد و null
+           -- می‌فرستد. بدون COALESCE، وصل‌کردن روش دوم هشدار «توکن نزدیک انقضا»
+           -- را برای همیشه خاموش می‌کرد.
+           token_expires_at=COALESCE(excluded.token_expires_at, accounts.token_expires_at),
            status='active',
            last_error=NULL,
            updated_at=@t`

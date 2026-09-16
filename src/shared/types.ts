@@ -35,6 +35,28 @@ export interface AccountRow {
   updated_at: number
 }
 
+/**
+ * سه راه اتصال، و اینکه هرکدام برای این حساب برقرار است یا نه.
+ *
+ * چرا جدا از ستون `engine`: آن ستون فقط *یک* مقدار دارد، پس اگر حسابی با دو
+ * روش وصل شود یکی از آن‌ها در UI ناپدید می‌شود. حقیقت واقعی در انبار
+ * اعتبارنامه‌هاست، و این شکل همان را بدون کم‌وکاست به UI می‌رساند.
+ */
+export interface AccountLinks {
+  /** ورود ساده: پنجره‌ی اینستاگرام داخل اپ */
+  simple: boolean
+  /** کد نشست: کوکی کپی‌شده از مرورگر خود کاربر */
+  sessionid: boolean
+  /** API رسمی متا */
+  official: boolean
+}
+
+export type LinkMethod = keyof AccountLinks
+
+export interface AccountWithLinks extends AccountRow {
+  links: AccountLinks
+}
+
 export type TriggerType =
   | 'comment_keyword'
   | 'comment_any'

@@ -68,6 +68,26 @@ check('upsert دوباره رکورد جدید نساخت', acc2.id === 1, acc2.
 check('username به‌روز شد', acc2.username === 'ashkan_store')
 check('تعداد حساب‌ها = ۱', accountsRepo.all().length === 1)
 
+// وصل‌کردن روش دوم روی همان حساب نباید اولی را پاک کند — باگی که باعث می‌شد
+// کاربر بعد از «ورود ساده»، اتصال رسمی‌اش را بی‌صدا از دست بدهد
+const withToken = accountsRepo.upsert({
+  ig_user_id: '17841400000000001',
+  username: 'ashkan_store',
+  engine: 'graph',
+  token_expires_at: 9999999999999
+})
+check('توکن ثبت شد', withToken.token_expires_at === 9999999999999)
+
+const afterSimple = accountsRepo.upsert({
+  ig_user_id: '17841400000000001',
+  username: 'ashkan_store',
+  engine: 'session',
+  followers_count: 1300
+})
+check('اتصال ساده، برچسب رسمی را تنزل نداد', afterSimple.engine === 'graph')
+check('اتصال ساده، انقضای توکن را پاک نکرد', afterSimple.token_expires_at === 9999999999999)
+check('اطلاعات تازه به‌روز شد', afterSimple.followers_count === 1300)
+
 console.log('\n=== 3. قوانین: JSON actions و فیلترِ فعال ===')
 const rule = rulesRepo.create({
   account_id: 1,

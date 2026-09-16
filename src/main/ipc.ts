@@ -11,7 +11,7 @@ import {
   rulesRepo,
   settingsRepo
 } from '../core/db/repos'
-import { engines, type IgProfile } from '../core/engine'
+import { engines, type IgProfile, type WebSessionData } from '../core/engine'
 import { SessionEngine } from '../core/engine/session-engine'
 import { jobQueue } from '../core/queue/job-queue'
 import { safetyGate } from '../core/queue/limiter'
@@ -26,6 +26,7 @@ import {
 } from '../core/automations'
 import { pollFollowers, pollMedia, pollerScheduler, syncFollowing } from '../core/pollers'
 import { IPC_CHANNELS, type ApiResult, type IpcApi } from '../shared/ipc'
+import type { AccountRow, AccountWithLinks } from '../shared/types'
 import {
   buildAuthUrl,
   bundledCredentials,
@@ -48,6 +49,25 @@ import { startWebhookFromSettings, webhookServer } from './webhook-server'
 const ok = <T>(data?: T): ApiResult<T> => ({ ok: true, data })
 const fail = (error: string, hint?: string): ApiResult<never> => ({ ok: false, error, hint })
 
+/**
+ * وضعیت زنده‌ی هر سه راه اتصال برای یک حساب.
+ *
+ * منبع حقیقت انبار اعتبارنامه‌هاست، نه ستون `engine` — چون یک حساب می‌تواند
+ * هم‌زمان با چند روش وصل باشد و آن ستون فقط یک مقدار جا دارد.
+ */
+function withLinks(a: AccountRow): AccountWithLinks {
+  const e = engines()
+  const web = e.web.connectedOrigins(a.id)
+  return {
+    ...a,
+    links: {
+      simple: web.includes('window'),
+      sessionid: web.includes('sessionid'),
+      official: e.graph.isConnected(a.id)
+    }
+  }
+}
+
 /** هر هندلر داخل try/catch می‌رود تا یک خطای پیش‌بینی‌نشده کل UI را قفل نکند */
 function wrap(
   fn: (arg: never) => unknown
@@ -67,7 +87,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   const handlers: { [K in keyof IpcApi]: (arg: never) => unknown } = {
     /* ═══════════════ حساب‌ها ═══════════════ */
 
-    listAccounts: () => ok(accountsRepo.all()),
+    listAccounts: () => ok(accountsRepo.all().map(withLinks)),
 
     connectGraphAccount: async () => {
       const res = await connectInstagramAccount(getWindow() ?? undefined)
@@ -104,7 +124,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
      */
     webLogin: async () => {
       let profile: IgProfile | null = null
-      let sessionData: { cookies: Record<string, string>; userAgent: string } | null = null
+      let sessionData: WebSessionData | null = null
 
       // تأیید *داخل* حلقه‌ی پنجره انجام می‌شود، نه بعد از بستنش.
       // این‌طور اگر کوکی‌های کهنه‌ای از تلاش قبلی مانده باشند، پنجره بی‌جهت
@@ -112,7 +132,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       const result = await loginWithInstagramWindow({
         parent: getWindow() ?? undefined,
         verify: async (r) => {
-          const data = { cookies: r.cookies as Record<string, string>, userAgent: r.userAgent }
+          const data = {
+            cookies: r.cookies as Record<string, string>,
+            userAgent: r.userAgent,
+            origin: 'window' as const
+          }
           try {
             profile = await engines().web.verifyAndGetProfile(data)
             sessionData = data
@@ -131,7 +155,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       // نباید رخ دهد چون پنجره فقط بعد از تأیید بسته می‌شود، ولی تایپ‌ها را قطعی می‌کنیم
       const finalSession = sessionData ?? {
         cookies: result.cookies as Record<string, string>,
-        userAgent: result.userAgent
+        userAgent: result.userAgent,
+        origin: 'window' as const
       }
       const finalProfile: IgProfile = profile ?? (await engines().web.verifyAndGetProfile(finalSession))
 
@@ -227,7 +252,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       const parsed = parseSessionId(p.sessionid)
       const userAgent = defaultUserAgent()
       const cookies = await buildCookiesFromSessionId(parsed, userAgent)
-      const sessionData = { cookies, userAgent }
+      const sessionData = { cookies, userAgent, origin: 'sessionid' as const }
 
       const profile = await engines().web.verifyAndGetProfile(sessionData)
 

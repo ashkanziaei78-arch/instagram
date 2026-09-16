@@ -137,9 +137,9 @@ async function bootstrap(): Promise<void> {
       clear: (accountId) => secureStore().clearSession(accountId)
     },
     webSessionStore: {
-      load: (accountId) => secureStore().getWebSession(accountId),
-      save: (accountId, s) => secureStore().setWebSession(accountId, s),
-      clear: (accountId) => secureStore().clearWebSession(accountId)
+      load: (accountId, origin) => secureStore().getWebSession(accountId, origin),
+      save: (accountId, origin, s) => secureStore().setWebSession(accountId, origin, s),
+      clear: (accountId, origin) => secureStore().clearWebSession(accountId, origin)
     }
   })
 

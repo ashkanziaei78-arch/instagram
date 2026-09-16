@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AccountRow } from '../shared/types'
+import type { AccountWithLinks } from '../shared/types'
 import { ToastHost } from './components/ui'
 import { call, igEvents } from './lib/api'
 import { AccountsPage } from './pages/Accounts'
@@ -32,9 +32,13 @@ const NAV: { key: PageKey; label: string; icon: string; group: 1 | 2 | 3 }[] = [
   { key: 'settings', label: 'تنظیمات', icon: '⚙', group: 3 }
 ]
 
+/** چند تا از سه راه اتصال برای این حساب برقرار است */
+const linkCount = (a: AccountWithLinks): number =>
+  Number(a.links.simple) + Number(a.links.sessionid) + Number(a.links.official)
+
 export default function App(): JSX.Element {
   const [page, setPage] = useState<PageKey>('dashboard')
-  const [accounts, setAccounts] = useState<AccountRow[]>([])
+  const [accounts, setAccounts] = useState<AccountWithLinks[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [killSwitch, setKillSwitch] = useState(false)
@@ -90,7 +94,7 @@ export default function App(): JSX.Element {
       case 'logs':
         return <LogsPage accountId={activeId} />
       case 'settings':
-        return <SettingsPage hasGraphAccount={accounts.some((a) => a.engine === 'graph')} />
+        return <SettingsPage hasGraphAccount={accounts.some((a) => a.links.official)} />
     }
   }
 
@@ -119,7 +123,7 @@ export default function App(): JSX.Element {
             >
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  @{a.username} ({a.engine === 'graph' ? 'رسمی' : 'Session'})
+                  @{a.username} ({linkCount(a)}/3 اتصال)
                 </option>
               ))}
             </select>
@@ -178,8 +182,10 @@ export default function App(): JSX.Element {
           <div className="flex items-center gap-2 text-xs">
             {killSwitch && <span className="chip-err">توقف اضطراری فعال</span>}
             {account ? (
-              <span className="chip-mute">
-                {account.engine === 'graph' ? 'API رسمی' : 'موتور Session'} · @{account.username}
+              // شمارش اتصال‌ها، نه نام یک موتور: یک حساب می‌تواند چند اتصال
+              // داشته باشد و نمایش فقط یکی، بقیه را نامرئی می‌کرد.
+              <span className={linkCount(account) === 3 ? 'chip-ok' : 'chip-warn'}>
+                {linkCount(account)} از ۳ اتصال · @{account.username}
               </span>
             ) : (
               !loading && <span className="chip-warn">هیچ حسابی وصل نیست</span>

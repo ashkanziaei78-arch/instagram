@@ -554,12 +554,21 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
     getMetaApp: () => {
       const cfg = secureStore().getMetaApp()
+      const built = bundledCredentials()
       // App Secret را کامل برنمی‌گردانیم؛ فقط نشان می‌دهیم که تنظیم شده
       return ok({
-        appId: cfg.appId,
-        appSecret: cfg.appSecret ? '••••••••' + cfg.appSecret.slice(-4) : undefined,
-        redirectUri: cfg.redirectUri,
-        webhookVerifyToken: cfg.webhookVerifyToken
+        // وقتی اعتبارنامه جاسازی شده، همان را نشان می‌دهیم — وگرنه کاربر
+        // فیلدهای خالی می‌بیند و فکر می‌کند چیزی تنظیم نشده، در حالی که اپ
+        // کامل کار می‌کند.
+        appId: built?.appId ?? cfg.appId,
+        appSecret: built
+          ? '••••••••' + built.appSecret.slice(-4)
+          : cfg.appSecret
+            ? '••••••••' + cfg.appSecret.slice(-4)
+            : undefined,
+        redirectUri: built?.redirectUri ?? cfg.redirectUri,
+        webhookVerifyToken: cfg.webhookVerifyToken,
+        bundled: built !== null
       })
     },
 
@@ -567,6 +576,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       const cfg = { ...p.config }
       // اگر کاربر مقدار ماسک‌شده را دست نزده، مقدار واقعی را بازنویسی نکن
       if (cfg.appSecret?.startsWith('••••')) delete cfg.appSecret
+      // وقتی اعتبارنامه جاسازی شده، getMetaApp همان را در فیلدها نشان می‌دهد.
+      // بدون این گارد، هر بار ذخیره آن مقادیر را در انبار کپی می‌کرد و اگر
+      // بعدا نسخه‌ای بدون جاسازی نصب می‌شد، اعتبارنامه‌ی کهنه سر جایش می‌ماند.
+      if (bundledCredentials()) {
+        delete cfg.appId
+        delete cfg.appSecret
+        delete cfg.redirectUri
+      }
       secureStore().setMetaApp(cfg)
       return ok()
     },

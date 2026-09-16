@@ -41,6 +41,11 @@ export interface MetaAppConfig {
   appSecret?: string
   redirectUri?: string
   webhookVerifyToken?: string
+  /**
+   * اعتبارنامه در زمان بیلد داخل اپ جاسازی شده — کاربر نیازی به وارد کردن
+   * چیزی ندارد. فقط در خروجی خوانده می‌شود؛ setMetaApp آن را نادیده می‌گیرد.
+   */
+  bundled?: boolean
 }
 
 export interface ContactSummary {

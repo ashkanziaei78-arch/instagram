@@ -190,33 +190,61 @@ export function SettingsPage({ hasGraphAccount }: { hasGraphAccount: boolean }):
         title="اتصال به API رسمی اینستاگرام"
         subtitle="یک بار تنظیم می‌شود. راهنمای گام‌به‌گام در فایل docs/SETUP-META-APP.md پروژه."
       >
-        <Notice tone="info" title="چطور این مقادیر را بگیرم">
-          <ol className="mr-4 mt-1 list-decimal space-y-1">
-            <li>به developers.facebook.com بروید و یک اپ از نوع Business بسازید</li>
-            <li>محصول «Instagram» را اضافه کنید و گزینه‌ی API with Instagram Login را بردارید</li>
-            <li>App ID و App Secret را از همان صفحه کپی کنید</li>
-            <li>
-              در بخش Business Login Settings، یک Redirect URI اضافه کنید (هر آدرس HTTPS معتبر — حتی
-              سایت خودتان) و همان را اینجا هم بنویسید
-            </li>
-            <li>حساب اینستاگرام باید Business یا Creator باشد</li>
-          </ol>
-        </Notice>
+        {meta.bundled ? (
+          <Notice tone="success" title="اعتبارنامه از قبل داخل اپ هست">
+            این نسخه با اعتبارنامه‌ی اپ متا بیلد شده، پس لازم نیست چیزی وارد کنید. مستقیم
+            به <strong>حساب‌ها</strong> بروید و <strong>+ اتصال حساب</strong> را بزنید.
+            <br />
+            <br />
+            تنها چیزی که پایین باقی می‌ماند <strong>Webhook Verify Token</strong> است، و آن
+            هم فقط اگر واکنش لحظه‌ای می‌خواهید — بدونش اپ با نظرسنجی هر ۳ دقیقه کار می‌کند.
+          </Notice>
+        ) : (
+          <Notice tone="info" title="چطور این مقادیر را بگیرم">
+            <ol className="mr-4 mt-1 list-decimal space-y-1">
+              <li>به developers.facebook.com بروید و یک اپ از نوع Business بسازید</li>
+              <li>محصول «Instagram» را اضافه کنید و گزینه‌ی API setup with Instagram login را بزنید</li>
+              <li>
+                در بخش <strong>Business login settings</strong>، مقادیر{' '}
+                <strong>Instagram app ID</strong> و <strong>Instagram app secret</strong> را کپی
+                کنید — نه App ID و App Secret صفحه‌ی Basic Settings؛ آن‌ها مال اپ فیسبوک‌اند و
+                اینجا کار نمی‌کنند
+              </li>
+              <li>
+                در همان بخش یک Redirect URI اضافه کنید (هر آدرس HTTPS معتبر — حتی سایت خودتان) و
+                همان را اینجا هم بنویسید
+              </li>
+              <li>حساب اینستاگرام باید Business یا Creator باشد</li>
+            </ol>
+          </Notice>
+        )}
 
         <div className="mt-4 space-y-4">
-          <Field label="App ID">
+          <Field
+            label="App ID"
+            hint={meta.bundled ? 'در زمان بیلد جاسازی شده — قابل تغییر از اینجا نیست' : undefined}
+          >
             <input
               className="input tabular"
               value={meta.appId ?? ''}
+              disabled={meta.bundled}
               onChange={(e) => setMeta({ ...meta, appId: e.target.value })}
               placeholder="مثلاً 1234567890123456"
             />
           </Field>
-          <Field label="App Secret" hint="با رمزنگاری ویندوز ذخیره می‌شود و در نمایش ماسک می‌شود">
+          <Field
+            label="App Secret"
+            hint={
+              meta.bundled
+                ? 'در زمان بیلد جاسازی شده'
+                : 'با رمزنگاری ویندوز ذخیره می‌شود و در نمایش ماسک می‌شود'
+            }
+          >
             <input
               className="input"
               type="text"
               value={meta.appSecret ?? ''}
+              disabled={meta.bundled}
               onChange={(e) => setMeta({ ...meta, appSecret: e.target.value })}
               placeholder="••••••••"
             />
@@ -226,6 +254,7 @@ export function SettingsPage({ hasGraphAccount }: { hasGraphAccount: boolean }):
               className="input"
               dir="ltr"
               value={meta.redirectUri ?? ''}
+              disabled={meta.bundled}
               onChange={(e) => setMeta({ ...meta, redirectUri: e.target.value })}
               placeholder="https://example.com/auth/callback"
             />
@@ -243,7 +272,7 @@ export function SettingsPage({ hasGraphAccount }: { hasGraphAccount: boolean }):
             />
           </Field>
           <button className="btn-primary" onClick={() => void saveMeta()}>
-            ذخیره‌ی تنظیمات متا
+            {meta.bundled ? 'ذخیره‌ی Verify Token' : 'ذخیره‌ی تنظیمات متا'}
           </button>
         </div>
       </Card>

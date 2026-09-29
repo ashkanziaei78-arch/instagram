@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="fa">
+<head>
+<meta charset="utf-8">
+<title>Sara English Teaser</title>
+<style>
+@font-face{font-family:Vazirmatn;font-weight:300;src:url(fonts/vazirmatn-arabic-300-normal.woff2)}
+@font-face{font-family:Vazirmatn;font-weight:400;src:url(fonts/vazirmatn-arabic-400-normal.woff2)}
+@font-face{font-family:Vazirmatn;font-weight:500;src:url(fonts/vazirmatn-arabic-500-normal.woff2)}
+@font-face{font-family:Vazirmatn;font-weight:700;src:url(fonts/vazirmatn-arabic-700-normal.woff2)}
+@font-face{font-family:Vazirmatn;font-weight:800;src:url(fonts/vazirmatn-arabic-800-normal.woff2)}
+@font-face{font-family:VazirLatin;font-weight:500;src:url(fonts/vazirmatn-latin-500-normal.woff2)}
+@font-face{font-family:VazirLatin;font-weight:700;src:url(fonts/vazirmatn-latin-700-normal.woff2)}
+@font-face{font-family:Cormorant;font-weight:500;src:url(fonts/cormorant-garamond-latin-500-normal.woff2)}
+@font-face{font-family:Cormorant;font-weight:600;src:url(fonts/cormorant-garamond-latin-600-normal.woff2)}
+@font-face{font-family:Cormorant;font-style:italic;font-weight:500;src:url(fonts/cormorant-garamond-latin-500-italic.woff2)}
+@font-face{font-family:Cormorant;font-style:italic;font-weight:600;src:url(fonts/cormorant-garamond-latin-600-italic.woff2)}
+
+:root{
+  --cream:#F4ECDF; --sand:#E7D8C1; --sage:#8FA282; --sage-deep:#4E6147;
+  --gold:#B8914B; --gold-soft:#D9BF8A; --ink:#3B3A34;
+  --mute-bg:#D8D6D1; --mute-ink:#6E6C68; --mute-line:#A3A09A;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;background:var(--cream)}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:var(--cream)}
+.layer{position:absolute;inset:0}
+.fa{font-family:Vazirmatn,VazirLatin,sans-serif;direction:rtl;text-align:center}
+.en{font-family:Cormorant,serif}
+.ltr{direction:ltr;unicode-bidi:isolate;font-family:VazirLatin,Vazirmatn,sans-serif}
+
+/* background blobs */
+.blob{position:absolute;border-radius:50%;filter:blur(60px)}
+#grain{position:absolute;inset:0;opacity:.10;mix-blend-mode:multiply;pointer-events:none}
+
+/* scenes */
+.scene{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0}
+.reveal{display:inline-block;will-change:transform,opacity}
+
+/* title */
+#title .kicker{font-size:34px;letter-spacing:.42em;color:var(--sage-deep);text-transform:uppercase;font-weight:600}
+#title h1{font-weight:500;color:var(--ink);font-size:150px;line-height:.98;text-align:center;margin-top:36px}
+#title h1 .it{font-style:italic;color:var(--gold);font-weight:500}
+#title .sub{font-size:52px;font-weight:500;color:var(--sage-deep);margin-top:70px}
+
+/* need */
+.need{background:transparent}
+.need .q{font-size:78px;font-weight:500;line-height:1.55;color:var(--mute-ink);max-width:880px}
+.need .dots{font-family:Cormorant;font-size:90px;color:var(--mute-line);letter-spacing:.2em;margin-bottom:30px}
+
+/* course */
+.course .icon{width:230px;height:230px}
+.course .eyebrow{font-size:52px;font-style:italic;color:var(--gold);margin-top:40px;font-weight:600}
+.course .name{font-size:112px;font-weight:800;color:var(--sage-deep);margin-top:6px;line-height:1.3}
+.course .rule{height:3px;background:var(--gold);width:0;margin:34px auto 38px}
+.course .desc{font-size:58px;font-weight:500;color:var(--ink);line-height:1.6;max-width:900px}
+.course .desc b{color:var(--sage-deep);font-weight:700}
+.course .card{position:absolute;left:70px;right:70px;top:430px;bottom:500px;border:2px solid var(--gold-soft);border-radius:44px;opacity:0}
+
+/* end */
+#end .me{font-size:120px;font-weight:800;color:var(--sage-deep)}
+#end .exp{font-size:56px;font-weight:500;color:var(--ink);margin-top:26px;line-height:1.6}
+#end .exp .gold{color:var(--gold);font-weight:700}
+#end .chips{display:flex;flex-direction:column;align-items:center;gap:22px;margin-top:56px}
+#end .chip{font-size:44px;font-weight:500;color:var(--sage-deep);border:2px solid var(--sage);border-radius:60px;padding:14px 46px}
+#end .ask{font-size:52px;font-weight:500;color:var(--ink);margin-top:110px}
+#end .cta{margin-top:34px;background:var(--gold);color:#FFF9EE;font-size:64px;font-weight:700;border-radius:80px;padding:22px 80px}
+#end .handle{font-size:62px;font-weight:600;color:var(--sage-deep);margin-top:40px;letter-spacing:.02em}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="layer" id="bg"></div>
+  <div class="layer" id="wash"></div>
+  <svg class="layer" id="thread" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>
+
+  <!-- 0 title -->
+  <section class="scene" id="title">
+    <div class="en kicker reveal">Online English Courses</div>
+    <h1 class="en"><span class="reveal">Speak English</span><br><span class="reveal it">with Confidence</span></h1>
+    <div class="fa sub reveal">دوره‌های آنلاین زبان انگلیسی</div>
+  </section>
+
+  <!-- needs + courses are injected by script -->
+  <div id="scenes"></div>
+
+  <!-- end -->
+  <section class="scene fa" id="end">
+    <div class="me reveal">من سارام</div>
+    <div class="exp reveal"><span class="gold">۸ سال</span> تجربه‌ی تدریس انگلیسی و آیلتس</div>
+    <div class="chips">
+      <div class="chip reveal">کلاس خصوصی و گروهی</div>
+      <div class="chip reveal">آنلاین از هر جای دنیا</div>
+    </div>
+    <div class="ask reveal">نمی‌دونی کدوم دوره مناسبته؟</div>
+    <div class="cta reveal">پیام بده <span style="font-family:serif">♥</span></div>
+    <div class="en handle reveal ltr" style="font-family:Cormorant">@sarasbr_eng</div>
+  </section>
+
+  <svg id="grain" width="1080" height="1920"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="3"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+</div>
+
+<script>
+// ---------- timeline (must match music.py) ----------
+const BEAT = 0.5, DUR = 46;
+const COURSES = [
+  { need: 'کلی لغت بلدی،<br>ولی وقت حرف زدن<br>قفل می‌کنی؟',
+    eyebrow: 'Free Discussion', name: 'فری دیسکاشن',
+    desc: 'راحت و بدون استرس<br><b>صحبت کن</b>', icon: 'bubble' },
+  { need: 'گرامر و لغت بلدی،<br>ولی کنار هم<br>نمی‌چسبن؟',
+    eyebrow: 'General English', name: 'جنرال انگلیش',
+    desc: '<span class="ltr">A2</span> تا پیشرفته<br>گرامر، لغت و مکالمه،<br><b>همه‌چیز باهم</b>', icon: 'book' },
+  { need: 'فاصله‌ی سطح فعلی‌ت<br>تا آیلتس زیاده؟',
+    eyebrow: 'Pre-IELTS', name: 'پیش‌آیلتس',
+    desc: 'فاصله رو پر کن<br><b>و آماده شو</b>', icon: 'target' },
+  { need: 'باند ۶.۵ یا ۷ لازم داری<br>و نمی‌خوای آزمون رو<br>دوباره بدی؟',
+    eyebrow: 'IELTS Academic', name: 'آیلتس آکادمیک',
+    desc: 'رسیدن به باند <b>۶.۵ تا ۷+</b><br>با استراتژی واقعی<br>و شبیه‌سازی آزمون', icon: 'trophy' },
+];
+const ICONS = {
+  bubble: '<path d="M40 60h130a22 22 0 0 1 22 22v62a22 22 0 0 1-22 22h-70l-38 32v-32H40a22 22 0 0 1-22-22V82a22 22 0 0 1 22-22z"/><path d="M62 104h86M62 128h56"/>',
+  book: '<path d="M115 62c-26-16-60-18-92-10v126c32-8 66-6 92 10 26-16 60-18 92-10V52c-32-8-66-6-92 10z"/><path d="M115 62v126"/>',
+  target: '<circle cx="115" cy="118" r="82"/><circle cx="115" cy="118" r="52"/><circle cx="115" cy="118" r="20"/><path d="M115 118L190 40M170 40h20v20"/>',
+  trophy: '<path d="M70 40h90v58a45 45 0 0 1-90 0z"/><path d="M70 58H36a30 30 0 0 0 34 42M160 58h34a30 30 0 0 1-34 42"/><path d="M115 143v35M80 196h70M92 178h46"/>',
+};
+
+const SCENES = [{ id: 'title', a: 0, b: 6, kind: 'title' }];
+let t0 = 6;
+COURSES.forEach((c, i) => {
+  SCENES.push({ id: 'need' + i, a: t0, b: t0 + 3, kind: 'need', i });
+  SCENES.push({ id: 'course' + i, a: t0 + 3, b: t0 + 8, kind: 'course', i });
+  t0 += 8;
+});
+SCENES.push({ id: 'end', a: 38, b: 46, kind: 'end' });
+
+// build DOM
+const host = document.getElementById('scenes');
+COURSES.forEach((c, i) => {
+  host.insertAdjacentHTML('beforeend', `
+  <section class="scene need fa" id="need${i}">
+    <div class="dots en reveal">. . .</div>
+    <div class="q">${c.need.split('<br>').map(l => `<span class="reveal line">${l}</span>`).join('<br>')}</div>
+  </section>
+  <section class="scene course fa" id="course${i}">
+    <div class="card"></div>
+    <svg class="icon reveal" viewBox="0 0 230 230" fill="none" stroke="#B8914B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">${ICONS[c.icon]}</svg>
+    <div class="eyebrow en reveal">${c.eyebrow}</div>
+    <div class="name reveal">${c.name}</div>
+    <div class="rule"></div>
+    <div class="desc">${c.desc.split('<br>').map(l => `<span class="reveal line">${l}</span>`).join('<br>')}</div>
+  </section>`);
+});
+
+// ---------- easing helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const easeOut = x => 1 - Math.pow(1 - clamp(x), 3);
+const easeInOut = x => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const backOut = x => { x = clamp(x); const c = 1.4; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+const lerp = (a, b, x) => a + (b - a) * x;
+const mixHex = (h1, h2, x) => {
+  const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const A = p(h1), B = p(h2);
+  return `rgb(${A.map((v, k) => Math.round(lerp(v, B[k], x))).join(',')})`;
+};
+// kick pulse: 1 on each beat, decays fast
+const pulse = t => Math.exp(-((t % BEAT) / 0.09));
+
+function reveal(el, p, dy = 40, scaleFrom = 1) {
+  const e = easeOut(p);
+  el.style.opacity = e;
+  const s = lerp(scaleFrom, 1, backOut(p));
+  el.style.transform = `translateY(${(1 - e) * dy}px) scale(${s})`;
+  el.style.filter = p < 1 ? `blur(${(1 - e) * 8}px)` : 'none';
+}
+function sceneAlpha(t, s, fin = .35, fout = .3) {
+  return clamp((t - s.a) / fin) * clamp((s.b - t) / fout);
+}
+
+// ---------- background ----------
+const bg = document.getElementById('bg');
+bg.innerHTML = `
+  <div class="blob" id="b1" style="width:760px;height:760px"></div>
+  <div class="blob" id="b2" style="width:620px;height:620px"></div>
+  <div class="blob" id="b3" style="width:520px;height:520px"></div>`;
+const b1 = document.getElementById('b1'), b2 = document.getElementById('b2'), b3 = document.getElementById('b3');
+const wash = document.getElementById('wash');
+const thread = document.getElementById('thread');
+thread.innerHTML = `<path id="th" fill="none" stroke-width="4" stroke-linecap="round"/>`;
+const th = document.getElementById('th');
+
+function warmth(t) {
+  // 1 = warm (title/course/end), 0 = muted (need); cross-fade over 0.35s
+  let w = 1;
+  for (const s of SCENES) if (s.kind === 'need') {
+    const into = clamp((t - s.a + .15) / .35), out = clamp((t - s.b + .05) / .3);
+    w = Math.min(w, 1 - into + out);
+  }
+  return clamp(w);
+}
+
+function drawBackground(t) {
+  const w = warmth(t);
+  document.getElementById('stage').style.background = mixHex('#D6D4CF', '#F4ECDF', w);
+  const g = t * 0.25;
+  b1.style.background = mixHex('#BDBBB6', '#D9BF8A', w);
+  b2.style.background = mixHex('#C4C3BF', '#B7C4AC', w);
+  b3.style.background = mixHex('#C9C7C2', '#E9D2AE', w);
+  b1.style.opacity = b2.style.opacity = b3.style.opacity = lerp(.45, .6, w);
+  b1.style.transform = `translate(${-240 + Math.sin(g) * 60}px, ${-160 + Math.cos(g * .8) * 50}px)`;
+  b2.style.transform = `translate(${620 + Math.cos(g * .9) * 60}px, ${1380 + Math.sin(g) * 60}px)`;
+  b3.style.transform = `translate(${700 + Math.sin(g * .7) * 50}px, ${120 + Math.cos(g) * 40}px)`;
+
+  // circular warm wash on each drop (need -> course)
+  let wa = 0, r = 0;
+  for (const s of SCENES) if (s.kind === 'course' || s.kind === 'end') {
+    const p = (t - s.a) / .7;
+    if (p >= 0 && p < 1.4) { r = easeOut(p) * 1500; wa = Math.max(wa, clamp(1.4 - p) * .55); }
+  }
+  wash.style.background = wa ? `radial-gradient(circle at 540px 900px, rgba(217,191,138,${wa}) 0, rgba(244,236,223,${wa * .6}) ${r * .6}px, rgba(244,236,223,0) ${r}px)` : 'none';
+
+  // the gold thread: tangled & grey in "need", straightens & turns gold in "course"
+  const straight = w;
+  const pts = [];
+  const y0 = 1520;
+  for (let i = 0; i <= 60; i++) {
+    const x = 90 + i * 15;
+    const k = i / 60;
+    const tangle = Math.sin(k * 23 + t * 2.1) * 70 + Math.sin(k * 41 - t * 1.3) * 35;
+    const wave = Math.sin(k * 6 + t * 1.6) * 16;
+    pts.push(`${x},${y0 + lerp(tangle, wave, straight)}`);
+  }
+  th.setAttribute('d', 'M' + pts.join(' L'));
+  th.setAttribute('stroke', mixHex('#A3A09A', '#B8914B', w));
+  const vis = t < 1.2 ? easeOut(t / 1.2) : t > 44.5 ? clamp((46 - t) / 1.2) : 1;
+  th.style.opacity = lerp(.55, .8, w) * vis;
+  const len = 1400;
+  th.style.strokeDasharray = len;
+  th.style.strokeDashoffset = len * (1 - easeInOut(t / 1.6));
+}
+
+// ---------- scenes ----------
+function drawTitle(t, s) {
+  const el = document.getElementById(s.id);
+  el.style.opacity = sceneAlpha(t, s, .01, .35);
+  const r = el.querySelectorAll('.reveal');
+  reveal(r[0], (t - .25) / .8, 20);
+  reveal(r[1], (t - 1.0) / .9, 60, .92);   // lands on the beat at 2s-ish
+  reveal(r[2], (t - 2.0) / .9, 60, .92);   // groove starts at 2s
+  reveal(r[3], (t - 3.0) / .9, 30);
+  const k = t >= 2 ? pulse(t) : 0;
+  el.querySelector('h1').style.transform = `scale(${1 + k * .012 + (t - 2) * .004})`;
+}
+
+function drawNeed(t, s) {
+  const el = document.getElementById(s.id);
+  el.style.opacity = sceneAlpha(t, s, .3, .2);
+  const r = el.querySelectorAll('.reveal');
+  reveal(r[0], (t - s.a) / .6, 0);
+  // lines land on consecutive beats
+  for (let i = 1; i < r.length; i++) reveal(r[i], (t - s.a - .2 - (i - 1) * BEAT) / .7, 30);
+  // slight uneasy drift
+  el.querySelector('.q').style.transform = `translateX(${Math.sin((t - s.a) * 3) * 4}px)`;
+}
+
+function drawCourse(t, s) {
+  const el = document.getElementById(s.id);
+  const lt = t - s.a;
+  el.style.opacity = sceneAlpha(t, s, .15, .3);
+  const r = el.querySelectorAll('.reveal');
+  // icon pops on the drop, then draws its stroke
+  const icon = r[0];
+  reveal(icon, lt / .5, 0, .4);
+  icon.querySelectorAll('path,circle').forEach(p => {
+    const L = p.getTotalLength ? p.getTotalLength() : 600;
+    p.style.strokeDasharray = L;
+    p.style.strokeDashoffset = L * (1 - easeInOut(lt / 1.1));
+  });
+  reveal(r[1], (lt - .5) / .6, 24);           // eyebrow (beat 2)
+  reveal(r[2], (lt - 1.0) / .7, 50, .9);      // course name (beat 3)
+  el.querySelector('.rule').style.width = `${easeInOut((lt - 1.4) / .6) * 260}px`;
+  for (let i = 3; i < r.length; i++) reveal(r[i], (lt - 1.5 - (i - 3) * BEAT) / .7, 30);
+  const card = el.querySelector('.card');
+  card.style.opacity = easeOut(lt / .8) * .9;
+  card.style.transform = `scale(${lerp(1.08, 1, easeOut(lt / .8))})`;
+  // beat pulse on the icon and name
+  const k = pulse(t);
+  icon.style.transform += ` scale(${1 + k * .05})`;
+  r[2].style.transform += ` scale(${1 + k * .015})`;
+}
+
+function drawEnd(t, s) {
+  const el = document.getElementById(s.id);
+  const lt = t - s.a;
+  el.style.opacity = clamp(lt / .2) * clamp((46 - t) / .8);
+  const r = el.querySelectorAll('.reveal');
+  const times = [0, .5, 1.0, 1.5, 2.5, 3.0, 3.5];
+  r.forEach((e, i) => reveal(e, (lt - times[i]) / .7, 36, i === 0 || i === 5 ? .85 : 1));
+  const k = pulse(t);
+  if (lt > 3.5 && t < 44) r[5].style.transform += ` scale(${1 + k * .04})`;
+}
+
+function render(t) {
+  drawBackground(t);
+  for (const s of SCENES) {
+    const el = document.getElementById(s.id);
+    if (t < s.a - .01 || t > s.b + .01) { el.style.opacity = 0; continue; }
+    ({ title: drawTitle, need: drawNeed, course: drawCourse, end: drawEnd })[s.kind](t, s);
+  }
+}
+window.render = render;
+window.DUR = DUR;
+
+// live preview when opened directly in a browser
+if (!location.search.includes('capture')) {
+  const start = performance.now();
+  (function loop() { render(((performance.now() - start) / 1000) % DUR); requestAnimationFrame(loop); })();
+} else {
+  render(0);
+}
+</script>
+</body>
+</html>

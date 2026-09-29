@@ -1,5 +1,5 @@
 // Renders teaser.html frame-by-frame and muxes with music.wav into an MP4.
-// usage: node render.mjs out.mp4 music.wav [--stills t1,t2,...]
+// usage: [HTML=v2/teaser.html] node render.mjs out.mp4 music.wav [--stills t1,t2,...]
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { execSync } from 'node:child_process';
@@ -12,7 +12,7 @@ const ffmpeg = execSync(`python3 -c "import imageio_ffmpeg;print(imageio_ffmpeg.
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
-await page.goto('file://' + path.resolve('teaser.html') + '?capture');
+await page.goto('file://' + path.resolve(process.env.HTML || 'teaser.html') + '?capture');
 await page.evaluate(() => document.fonts.ready);
 await page.waitForTimeout(300);
 const DUR = await page.evaluate(() => window.DUR);

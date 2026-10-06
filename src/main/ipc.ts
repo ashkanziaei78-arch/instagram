@@ -24,7 +24,7 @@ import {
   resumeBroadcast as resumeBc,
   startBroadcast as startBc
 } from '../core/automations'
-import { pollFollowers, pollMedia, pollerScheduler, syncFollowing } from '../core/pollers'
+import { pollFollowers, pollInbox, pollMedia, pollerScheduler, syncFollowing } from '../core/pollers'
 import { IPC_CHANNELS, type ApiResult, type IpcApi } from '../shared/ipc'
 import type { AccountRow, AccountWithLinks } from '../shared/types'
 import {
@@ -487,6 +487,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         }))
       ),
 
+    pollInboxNow: async (p: { accountId: number }) => {
+      const r = await pollInbox(p.accountId)
+      return r.ok ? ok({ handled: r.handled, message: r.message }) : fail(r.message)
+    },
+
     syncFollowers: async (p: { accountId: number }) => {
       const r = await pollFollowers(p.accountId)
       return r.ok
@@ -541,6 +546,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
             if (!g.ok) return fail('همگام‌سازی فالووینگ‌ها ناموفق بود: ' + g.message)
           }
           r = startBc(p.broadcastId)
+          if (!r.ok && r.total === 0) {
+            return fail(
+              'همگام‌سازی انجام شد ولی اینستاگرام ' + f.total + ' فالوور برگرداند' +
+                (f.total === 0 ? ' — این حساب فعلا فالووری ندارد، یا اینستاگرام لیست را نداد.' : '.'),
+              'لیست کامل در صفحه‌ی «مخاطبان» است.'
+            )
+          }
         }
       }
       return r.ok ? ok({ total: r.total, message: r.message }) : fail(r.message)

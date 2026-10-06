@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { MatchMode, Rule, RuleAction, TriggerType } from '../../shared/types'
 import { Card, EmptyState, Field, Modal, Notice, Select, Spinner, Toggle } from '../components/ui'
-import { call, fmtFull, toasts } from '../lib/api'
+import { call, callRaw, fmtFull, toasts } from '../lib/api'
 
 const TRIGGERS: { value: TriggerType; label: string; desc: string }[] = [
   {
@@ -115,9 +115,26 @@ export function AutomationsPage({ accountId }: { accountId: number | null }): JS
         title="قوانین اتوماسیون"
         subtitle="هر قانون یک تریگر دارد و یک یا چند اکشن. قوانین با اولویت بالاتر اول بررسی می‌شوند."
         action={
-          <button className="btn-primary btn-sm" onClick={() => setDraft(emptyDraft(accountId))}>
-            + قانون جدید
-          </button>
+          <div className="flex gap-2">
+            {accountId && (
+              <button
+                className="btn-ghost btn-sm"
+                title="دایرکت‌ها خودکار هر ۹۰ ثانیه خوانده می‌شوند؛ این دکمه همین الان می‌خواند"
+                onClick={() => {
+                  void callRaw('pollInboxNow', { accountId }).then((r) =>
+                    r.ok
+                      ? toasts.push('success', (r.data as { message?: string } | undefined)?.message ?? 'انجام شد')
+                      : toasts.push('error', r.error ?? 'خواندن دایرکت ناموفق بود', r.hint)
+                  )
+                }}
+              >
+                بررسی دایرکت‌ها الان
+              </button>
+            )}
+            <button className="btn-primary btn-sm" onClick={() => setDraft(emptyDraft(accountId))}>
+              + قانون جدید
+            </button>
+          </div>
         }
       >
         {loading ? (

@@ -326,6 +326,15 @@ export async function pollInbox(accountId: number): Promise<{ ok: boolean; handl
       idSource: useWeb ? 'web' : 'graph'
     })
     if (r.handled) handled++
+    // هر دایرکت دیده‌شده و سرنوشتش در صفحه‌ی فعالیت — بدون این، «جواب نداد»
+    // از بیرون یکسان به نظر می‌رسید چه پیام دیده نشده بود، چه قانونی نخورده بود
+    logRepo.add({
+      account_id: accountId,
+      level: r.handled ? 'success' : 'info',
+      category: 'dm',
+      message:
+        'دایرکت از @' + (dm.from_username ?? dm.from_user_id) + ': «' + dm.text.slice(0, 60) + '» → ' + r.reason
+    })
   }
   // بعد از پردازش جلو می‌بریم، نه قبل — اگر وسط کار کرش کند، دفعه‌ی بعد دوباره
   // امتحان می‌شود و dedupe_key صف جلوی ارسال تکراری را می‌گیرد

@@ -107,6 +107,8 @@ export interface IpcApi {
   listContacts(p: { accountId: number; audience?: string; limit?: number }): Promise<ApiResult<ContactSummary[]>>
   syncFollowers(p: { accountId: number }): Promise<ApiResult<{ total: number; newCount: number; welcomed: number; message: string }>>
   syncFollowing(p: { accountId: number }): Promise<ApiResult<{ total: number; message: string }>>
+  /** خواندن فوری دایرکت‌ها — بدون منتظر ماندن برای تیک ۹۰ ثانیه‌ای */
+  pollInboxNow(p: { accountId: number }): Promise<ApiResult<{ handled: number; message: string }>>
   audienceCount(p: { accountId: number; filter: BroadcastTargetFilter }): Promise<ApiResult<number>>
 
   /* برادکست */
@@ -172,6 +174,7 @@ export const IPC_CHANNELS: IpcChannel[] = [
   'listContacts',
   'syncFollowers',
   'syncFollowing',
+  'pollInboxNow',
   'audienceCount',
   'listBroadcasts',
   'createBroadcast',

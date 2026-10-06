@@ -108,7 +108,9 @@ export default function App(): JSX.Element {
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-100">IG Auto Suite</p>
-            <p className="text-[10px] text-slate-500">اتوماسیون اینستاگرام</p>
+            <p className="text-[10px] text-slate-500">
+              اتوماسیون اینستاگرام · نسخه‌ی {__APP_VERSION__}
+            </p>
           </div>
         </div>
 

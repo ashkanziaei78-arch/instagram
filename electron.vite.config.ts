@@ -73,6 +73,13 @@ export default defineConfig({
         '@shared': resolve(__dirname, 'src/shared')
       }
     },
-    plugins: [react()]
+    plugins: [react()],
+    // نسخه در نوار کناری: وقتی کاربر می‌گوید «هنوز خراب است»، اول باید معلوم
+    // باشد کدام بیلد را اجرا می‌کند
+    define: {
+      __APP_VERSION__: JSON.stringify(
+        (JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string }).version
+      )
+    }
   }
 })

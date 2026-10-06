@@ -911,6 +911,12 @@ export const logRepo = {
     message: string
     meta?: unknown
   }): void {
+    // صفحه‌ی فعالیت فقط message را نشان می‌دهد. خطای واقعی که در meta.error
+    // بود هرگز دیده نمی‌شد و کاربر فقط «ناموفق بود» می‌دید بدون هیچ دلیلی.
+    const err = (l.meta as { error?: unknown } | undefined)?.error
+    const message = typeof err === 'string' && err && !l.message.includes(err)
+      ? l.message + ' — ' + err.slice(0, 300)
+      : l.message
     getDb()
       .prepare(
         'INSERT INTO activity_log(account_id, level, category, message, meta, created_at) VALUES(?,?,?,?,?,?)'
@@ -919,7 +925,7 @@ export const logRepo = {
         l.account_id ?? null,
         l.level ?? 'info',
         l.category ?? 'general',
-        l.message,
+        message,
         l.meta ? JSON.stringify(l.meta) : null,
         now()
       )

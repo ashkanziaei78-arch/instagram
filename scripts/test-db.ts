@@ -4,6 +4,7 @@
  */
 import { rmSync, existsSync } from 'node:fs'
 import { initDb, closeDb, getDb } from '../src/core/db/index'
+import { MIGRATIONS } from '../src/core/db/schema'
 import {
   accountsRepo,
   rulesRepo,
@@ -40,7 +41,7 @@ function check(name: string, cond: boolean, extra?: unknown): void {
 console.log('\n=== 1. مهاجرت و باز شدن دیتابیس ===')
 initDb(DB)
 const ver = getDb().pragma('user_version', { simple: true })
-check('user_version برابر آخرین مهاجرت است', Number(ver) === 2, ver)
+check('user_version برابر آخرین مهاجرت است', Number(ver) === MIGRATIONS[MIGRATIONS.length - 1].version, ver)
 const tables = getDb()
   .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
   .all<{ name: string }>()
@@ -87,6 +88,57 @@ const afterSimple = accountsRepo.upsert({
 check('اتصال ساده، برچسب رسمی را تنزل نداد', afterSimple.engine === 'graph')
 check('اتصال ساده، انقضای توکن را پاک نکرد', afterSimple.token_expires_at === 9999999999999)
 check('اطلاعات تازه به‌روز شد', afterSimple.followers_count === 1300)
+
+// یک حساب، دو شناسه: API رسمی 17841… می‌دهد و روش ساده pk وب. قبلا این دو ردیف
+// جدا می‌ساختند و کاربر یک حساب را دو بار در لیست می‌دید.
+{
+  const before = accountsRepo.all().length
+  const web = accountsRepo.upsert({ ig_user_id: '5550001', username: 'Same.User', engine: 'session' })
+  const official = accountsRepo.upsert({
+    ig_user_id: '17841499999999999',
+    username: 'same.user',
+    engine: 'graph'
+  })
+  check('روش دوم ردیف تازه نساخت', official.id === web.id && accountsRepo.all().length === before + 1)
+  check('شناسه‌ی رسمی اصلی شد', official.ig_user_id === '17841499999999999')
+  check('شناسه‌ی وب در alt نشست', official.alt_ig_user_id === '5550001')
+  check('با هر دو شناسه پیدا می‌شود',
+    accountsRepo.byIgId('5550001')?.id === web.id && accountsRepo.byIgId('17841499999999999')?.id === web.id)
+
+  // اتصال دوباره با روش ساده نباید شناسه‌ی رسمی را عوض کند
+  const again = accountsRepo.upsert({ ig_user_id: '5550001', username: 'same.user', engine: 'session' })
+  check('اتصال دوباره‌ی ساده همان ردیف است', again.id === web.id && accountsRepo.all().length === before + 1)
+  check('شناسه‌ی رسمی دست نخورد', again.ig_user_id === '17841499999999999' && again.engine === 'graph')
+
+  // ترتیب برعکس: اول رسمی، بعد ساده
+  const off2 = accountsRepo.upsert({ ig_user_id: '17841488888888888', username: 'other.one', engine: 'graph' })
+  const web2 = accountsRepo.upsert({ ig_user_id: '7770002', username: 'other.one', engine: 'session' })
+  check('ترتیب برعکس هم یک ردیف است', web2.id === off2.id)
+  check('ترتیب برعکس: رسمی اصلی ماند', web2.ig_user_id === '17841488888888888' && web2.alt_ig_user_id === '7770002')
+}
+
+// ادغام ردیف‌های تکراری که نسخه‌ی قبل ساخته بود
+{
+  const db = getDb()
+  const t = Date.now()
+  db.prepare(
+    `INSERT INTO accounts(ig_user_id, username, engine, status, created_at, updated_at)
+     VALUES ('9990001','dup.user','session','active',?,?), ('17841477777777777','dup.user','graph','active',?,?)`
+  ).run(t, t, t, t)
+  const groups = accountsRepo.duplicateGroups()
+  check('تکراری‌ها پیدا شدند', groups.length === 1 && groups[0].length === 2)
+  const [a, b] = groups[0]
+  const target = b.engine === 'graph' ? b : a
+  const other = target === a ? b : a
+  db.prepare(
+    `INSERT INTO rules(account_id, name, trigger_type, created_at, updated_at) VALUES (?,?,?,?,?)`
+  ).run(other.id, 'قانون روی ردیف تکراری', 'comment_any', t, t)
+  const merged = accountsRepo.mergeInto(target, other)
+  check('ادغام: یک ردیف ماند', accountsRepo.duplicateGroups().length === 0)
+  check('ادغام: شناسه‌ی وب در alt', merged.alt_ig_user_id === '9990001')
+  check('ادغام: قانون منتقل شد',
+    (db.prepare('SELECT COUNT(*) c FROM rules WHERE account_id=?').get(target.id) as { c: number }).c === 1)
+}
 
 console.log('\n=== 3. قوانین: JSON actions و فیلترِ فعال ===')
 const rule = rulesRepo.create({
@@ -243,7 +295,7 @@ closeDb()
 initDb(DB)
 check(
   'بعد از بستن و باز کردن، داده‌ها سر جایشان هستند',
-  accountsRepo.all().length === 1 && rulesRepo.byAccount(1).length === 2
+  accountsRepo.byId(1)?.username === 'ashkan_store' && rulesRepo.byAccount(1).length === 2
 )
 closeDb()
 cleanup()

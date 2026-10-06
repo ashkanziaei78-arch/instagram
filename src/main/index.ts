@@ -156,6 +156,24 @@ async function bootstrap(): Promise<void> {
   registerJobHandlers()
   jobQueue.start(5000)
 
+  // نسخه‌های قبلی یک حساب را که با دو روش وصل می‌شد دو ردیف جدا ثبت می‌کردند
+  // (هر روش شناسه‌ی متفاوتی برمی‌گرداند). اینجا یکی‌شان می‌کنیم: ردیفی که API
+  // رسمی دارد اصلی می‌ماند و اعتبارنامه‌های دیگری به آن منتقل می‌شود.
+  for (const group of accountsRepo.duplicateGroups()) {
+    const target = group.find((a) => secureStore().getToken(a.id)) ?? group[0]
+    for (const other of group) {
+      if (other.id === target.id) continue
+      secureStore().moveAccount(other.id, target.id)
+      accountsRepo.mergeInto(target, other)
+      logRepo.add({
+        account_id: target.id,
+        level: 'info',
+        category: 'auth',
+        message: 'دو ردیف تکراری @' + target.username + ' یکی شدند'
+      })
+    }
+  }
+
   // شناسه‌ی اینستاگرام حساب‌های موجود را در موتور رسمی ثبت کن تا مسیر
   // /{ig-user-id}/messages بعد از ری‌استارت هم کار کند
   for (const acc of accountsRepo.all()) {

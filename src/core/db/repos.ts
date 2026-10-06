@@ -67,9 +67,59 @@ export const accountsRepo = {
     return getDb().prepare('SELECT * FROM accounts WHERE id = ?').get(id) as AccountRow | undefined
   },
   byIgId(igId: string): AccountRow | undefined {
-    return getDb().prepare('SELECT * FROM accounts WHERE ig_user_id = ?').get(igId) as
-      | AccountRow
-      | undefined
+    return getDb()
+      .prepare('SELECT * FROM accounts WHERE ig_user_id = ? OR alt_ig_user_id = ? LIMIT 1')
+      .get(igId, igId) as AccountRow | undefined
+  },
+
+  /**
+   * ردیفی که *همین* حساب اینستاگرام است، حتی اگر با شناسه‌ی دیگری ثبت شده.
+   *
+   * چرا نام کاربری هم ملاک است: API رسمی و روش ساده دو شناسه‌ی کاملا متفاوت
+   * برای یک حساب برمی‌گردانند، و تا یکی از آن‌ها در ستون alt ثبت نشده، تنها
+   * چیز مشترکشان نام کاربری است. ردیفی که شناسه‌ی اصلی‌اش دقیقا همین است اول
+   * می‌آید تا هرگز یک ردیف دیگر به‌جایش انتخاب نشود.
+   */
+  findSame(igId: string, username: string): AccountRow | undefined {
+    return getDb()
+      .prepare(
+        `SELECT * FROM accounts
+         WHERE ig_user_id = ? OR alt_ig_user_id = ? OR lower(username) = lower(?)
+         ORDER BY (ig_user_id = ?) DESC, (alt_ig_user_id = ?) DESC, id
+         LIMIT 1`
+      )
+      .get(igId, igId, username, igId, igId) as AccountRow | undefined
+  },
+
+  /** ردیف‌هایی که نام کاربری‌شان یکی است — یادگار نسخه‌ی قبل از ستون alt */
+  duplicateGroups(): AccountRow[][] {
+    const groups = new Map<string, AccountRow[]>()
+    for (const a of this.all()) {
+      const k = a.username.toLowerCase()
+      groups.set(k, [...(groups.get(k) ?? []), a])
+    }
+    return [...groups.values()].filter((g) => g.length > 1)
+  },
+
+  /**
+   * ردیف تکراری را در ردیف اصلی ادغام می‌کند.
+   *
+   * قوانین منتقل می‌شوند چون کاربر آن‌ها را دستی ساخته؛ بقیه (مخاطبان، پست‌ها،
+   * صف) با حذف ردیف پاک می‌شوند و در همگام‌سازی بعدی دوباره ساخته می‌شوند —
+   * انتقالشان با ایندکس‌های یکتا تداخل داشت و ارزشی هم نداشت.
+   */
+  mergeInto(target: AccountRow, other: AccountRow): AccountRow {
+    const db = getDb()
+    db.prepare('UPDATE rules SET account_id=? WHERE account_id=?').run(target.id, other.id)
+    db.prepare('DELETE FROM accounts WHERE id=?').run(other.id)
+    db.prepare(
+      `UPDATE accounts SET
+         alt_ig_user_id = COALESCE(alt_ig_user_id, ?),
+         token_expires_at = COALESCE(token_expires_at, ?),
+         updated_at = ?
+       WHERE id = ?`
+    ).run(other.ig_user_id, other.token_expires_at, now(), target.id)
+    return this.byId(target.id)!
   },
   upsert(a: {
     ig_user_id: string
@@ -83,7 +133,32 @@ export const accountsRepo = {
     token_expires_at?: number | null
   }): AccountRow {
     const t = now()
-    getDb()
+    const db = getDb()
+
+    // اگر همین حساب با روش دیگری (پس با شناسه‌ی دیگری) ثبت شده، به‌جای ساختن
+    // ردیف تازه شناسه‌ها را روی همان ردیف هم‌تراز می‌کنیم. شناسه‌ی API رسمی
+    // همیشه اصلی می‌شود، چون وبهوک‌ها و مسیر /{ig-user-id}/messages با آن کار
+    // می‌کنند؛ شناسه‌ی وب در alt می‌نشیند.
+    let key = a.ig_user_id
+    const same = this.findSame(a.ig_user_id, a.username)
+    if (same && same.ig_user_id !== a.ig_user_id) {
+      if (a.engine === 'graph') {
+        db.prepare('UPDATE accounts SET ig_user_id=?, alt_ig_user_id=? WHERE id=?').run(
+          a.ig_user_id,
+          same.ig_user_id,
+          same.id
+        )
+      } else if (same.alt_ig_user_id === a.ig_user_id) {
+        key = same.ig_user_id
+      } else if (same.engine === 'graph') {
+        db.prepare('UPDATE accounts SET alt_ig_user_id=? WHERE id=?').run(a.ig_user_id, same.id)
+        key = same.ig_user_id
+      } else {
+        db.prepare('UPDATE accounts SET ig_user_id=? WHERE id=?').run(a.ig_user_id, same.id)
+      }
+    }
+
+    db
       .prepare(
         `INSERT INTO accounts
           (ig_user_id, username, name, profile_picture_url, engine, followers_count,
@@ -112,7 +187,7 @@ export const accountsRepo = {
            updated_at=@t`
       )
       .run({
-        ig_user_id: a.ig_user_id,
+        ig_user_id: key,
         username: a.username,
         name: a.name ?? null,
         profile_picture_url: a.profile_picture_url ?? null,
@@ -123,7 +198,7 @@ export const accountsRepo = {
         token_expires_at: a.token_expires_at ?? null,
         t
       })
-    return this.byIgId(a.ig_user_id)!
+    return this.byIgId(key)!
   },
   setStatus(id: number, status: AccountRow['status'], error?: string): void {
     getDb()

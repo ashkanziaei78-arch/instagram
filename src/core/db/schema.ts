@@ -213,5 +213,15 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       baseline_done INTEGER NOT NULL DEFAULT 0
     );
     `
+  },
+  {
+    version: 3,
+    sql: `
+    -- یک حساب اینستاگرام دو شناسه دارد: API رسمی شناسه‌ی حساب حرفه‌ای را
+    -- می‌دهد (17841…) و روش‌های ساده شناسه‌ی کاربری وب (pk). بدون این ستون،
+    -- وصل‌کردن یک حساب با دو روش دو ردیف جدا می‌ساخت.
+    ALTER TABLE accounts ADD COLUMN alt_ig_user_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_accounts_alt ON accounts(alt_ig_user_id);
+    `
   }
 ]

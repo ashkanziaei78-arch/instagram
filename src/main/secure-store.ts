@@ -159,6 +159,28 @@ class SecureStore {
     this.write()
   }
 
+  /**
+   * اعتبارنامه‌های یک حساب را به حساب دیگری منتقل می‌کند — برای ادغام ردیف‌های
+   * تکراری. چیزی که مقصد از قبل دارد بازنویسی نمی‌شود.
+   */
+  moveAccount(from: number, to: number): void {
+    const v = this.read()
+    const f = String(from)
+    const t = String(to)
+    if (v.tokens[f] && !v.tokens[t]) v.tokens[t] = v.tokens[f]
+    if (v.sessions[f] && !v.sessions[t]) v.sessions[t] = v.sessions[f]
+    delete v.tokens[f]
+    delete v.sessions[f]
+
+    for (const o of ['window', 'sessionid'] as WebOrigin[]) {
+      const src = v.webSessions[this.webKey(from, o)] ?? (o === 'window' ? v.webSessions[f] : undefined)
+      if (src && !this.getWebSession(to, o)) v.webSessions[this.webKey(to, o)] = src
+      delete v.webSessions[this.webKey(from, o)]
+    }
+    delete v.webSessions[f]
+    this.write()
+  }
+
   /* ─────────── تنظیمات اپ متا ─────────── */
 
   getMetaApp(): VaultShape['metaApp'] {

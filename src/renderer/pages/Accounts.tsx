@@ -224,22 +224,6 @@ export function AccountsPage({
           />
         </div>
 
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-white/[0.07] px-3 py-2.5">
-          <p className="text-[11px] leading-relaxed text-slate-400">
-            می‌خواهید حساب دیگری وصل کنید و پنجره‌ی ورود شما را از قبل وارد نشان می‌دهد؟
-          </p>
-          <button
-            className="btn-ghost btn-sm shrink-0"
-            onClick={() => {
-              void call('clearWebLogin').then(() =>
-                toasts.push('info', 'نشست مرورگر داخلی پاک شد — حالا می‌توانید با حساب دیگری وارد شوید')
-              )
-            }}
-          >
-            خروج از پنجره‌ی ورود
-          </button>
-        </div>
-
         <details className="mt-3">
           <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">
             روش چهارم: ورود با نام کاربری و رمز (توصیه نمی‌شود)

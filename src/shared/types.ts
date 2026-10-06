@@ -21,6 +21,8 @@ export type Capability =
 export interface AccountRow {
   id: number
   ig_user_id: string
+  /** شناسه‌ی دوم همین حساب — وقتی هم با API رسمی و هم با روش ساده وصل است */
+  alt_ig_user_id: string | null
   username: string
   name: string | null
   profile_picture_url: string | null

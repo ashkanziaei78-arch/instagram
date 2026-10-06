@@ -744,6 +744,36 @@ export class WebEngine implements IEngine {
    *
    * زمان در این API میکروثانیه است، نه میلی‌ثانیه.
    */
+  /**
+   * میزبانی که صندوق دایرکت را جواب داد. www.instagram.com این مسیر را ۴۰۴
+   * می‌دهد (وب نسخه‌ی جدید دایرکت را با GraphQL می‌خواند)، ولی i.instagram.com
+   * با همان کوکی‌ها جواب می‌دهد — همان ترفندی که برای فهرست پست‌ها هم لازم شد.
+   * میزبان موفق را نگه می‌داریم تا هر ۹۰ ثانیه یک درخواست بیهوده نزنیم.
+   */
+  private inboxHost: string | null = null
+
+  private async inboxRequest<T>(accountId: number, path: string): Promise<T> {
+    const hosts = this.inboxHost
+      ? [this.inboxHost]
+      : ['https://i.instagram.com', 'https://www.instagram.com']
+    let last: unknown
+    for (const host of hosts) {
+      try {
+        const d = await this.request<T>(accountId, host + path, {
+          query: { persistentBadging: 'true', limit: '20', thread_message_limit: '10' },
+          context: 'خواندن دایرکت‌ها'
+        })
+        this.inboxHost = host
+        return d
+      } catch (e) {
+        if (e instanceof AuthError || e instanceof RateLimitError) throw e
+        last = e
+      }
+    }
+    this.inboxHost = null
+    throw last
+  }
+
   async listIncomingDms(accountId: number, sinceMs: number): Promise<IgDm[]> {
     const me = this.pk(accountId)
     const out: IgDm[] = []
@@ -754,10 +784,7 @@ export class WebEngine implements IEngine {
     }
 
     for (const path of ['/api/v1/direct_v2/inbox/', '/api/v1/direct_v2/pending_inbox/']) {
-      const d = await this.request<{ inbox?: { threads?: Thread[] } }>(accountId, path, {
-        query: { persistentBadging: 'true', limit: '20', thread_message_limit: '10' },
-        context: 'خواندن دایرکت‌ها'
-      })
+      const d = await this.inboxRequest<{ inbox?: { threads?: Thread[] } }>(accountId, path)
       for (const t of d.inbox?.threads ?? []) {
         const names = new Map((t.users ?? []).map((u) => [String(u.pk), u.username]))
         for (const it of t.items ?? []) {

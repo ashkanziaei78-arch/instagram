@@ -531,6 +531,8 @@ async function run(): Promise<void> {
       })
     })
     const dms = await ib.listIncomingDms(ACC, 1_000)
+    check('از میزبان موبایل خوانده شد (www این مسیر را ۴۰۴ می‌دهد)',
+      captured[0].url.startsWith('https://i.instagram.com/api/v1/direct_v2/inbox/'))
     check('هم صندوق اصلی و هم درخواست‌ها خوانده شد', captured.length === 2 &&
       captured[1].url.includes('pending_inbox'))
     check('پیام خودم، غیرمتنی و قدیمی‌تر از خط‌مبنا رد شد', dms.length === 2, dms.map((d) => d.message_id))

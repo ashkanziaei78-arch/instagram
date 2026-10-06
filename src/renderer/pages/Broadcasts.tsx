@@ -4,12 +4,12 @@ import { Card, EmptyState, Field, Modal, Notice, Select, Spinner } from '../comp
 import { call, fmtDate, fmtFull, toasts } from '../lib/api'
 
 const AUDIENCE_OPTIONS: { value: BroadcastTargetFilter['audience']; label: string; note: string }[] = [
+  { value: 'followers', label: 'فالوورهای من', note: 'نیازمند ورود ساده یا کد نشست' },
   {
     value: 'engaged_24h',
     label: 'کسانی که در ۲۴ ساعت اخیر پیام دادند',
     note: 'بی‌ریسک — با API رسمی مجاز است'
   },
-  { value: 'followers', label: 'فالوورهای من', note: 'نیازمند موتور Session' },
   { value: 'following', label: 'کسانی که فالو کرده‌ام', note: 'نیازمند موتور Session' },
   { value: 'mutual', label: 'فالوور متقابل', note: 'نیازمند موتور Session' }
 ]
@@ -176,7 +176,7 @@ function CreateBroadcastModal({
 }): JSX.Element {
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
-  const [audience, setAudience] = useState<BroadcastTargetFilter['audience']>('engaged_24h')
+  const [audience, setAudience] = useState<BroadcastTargetFilter['audience']>('followers')
   const [limit, setLimit] = useState(30)
   const [skipPrivate, setSkipPrivate] = useState(false)
   const [count, setCount] = useState<number | null>(null)
@@ -220,7 +220,7 @@ function CreateBroadcastModal({
           <button className="btn-ghost" onClick={onClose}>
             انصراف
           </button>
-          <button className="btn-primary" disabled={busy} onClick={() => void create()}>
+          <button className="btn-primary" disabled={busy || count === 0} onClick={() => void create()}>
             {busy ? 'در حال ساخت…' : 'ساخت (بدون ارسال)'}
           </button>
         </>
@@ -289,8 +289,9 @@ function CreateBroadcastModal({
             </span>
             {count === 0 && (
               <span className="mt-1 block text-[11px] leading-relaxed text-amber-300">
-                لیست خالی است. اگر مخاطب «فالوورها» است، ابتدا از صفحه‌ی مخاطبان لیست فالوورها را
-                همگام کنید (نیازمند موتور Session).
+                {audience === 'engaged_24h'
+                  ? 'در ۲۴ ساعت اخیر کسی به شما دایرکت نداده. گیرنده را «فالوورهای من» بگذارید.'
+                  : 'لیست خالی است. از صفحه‌ی مخاطبان «همگام‌سازی فالوورها» را بزنید.'}
               </span>
             )}
           </p>

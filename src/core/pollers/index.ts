@@ -301,18 +301,35 @@ export async function pollComments(
  */
 export async function pollInbox(accountId: number): Promise<{ ok: boolean; handled: number; message: string }> {
   const e = engines()
-  const useWeb = e.web.isConnected(accountId)
-  const engine = useWeb ? e.web : e.graph.isConnected(accountId) ? e.graph : null
-  if (!engine?.listIncomingDms) return { ok: false, handled: 0, message: 'هیچ اتصالی برای خواندن دایرکت نیست' }
+  const hasWeb = e.web.isConnected(accountId)
+  const hasGraph = e.graph.isConnected(accountId)
+  if (!hasWeb && !hasGraph) return { ok: false, handled: 0, message: 'هیچ اتصالی برای خواندن دایرکت نیست' }
 
   const key = 'inboxSince:' + accountId
   const since = settingsRepo.get<number>(key, 0)
   if (!since) {
     settingsRepo.set(key, Date.now())
-    return { ok: true, handled: 0, message: 'خط‌مبنای دایرکت‌ها ثبت شد' }
+    return { ok: true, handled: 0, message: 'خط‌مبنای دایرکت‌ها ثبت شد — از این لحظه دایرکت‌های تازه جواب می‌گیرند' }
   }
 
-  const dms = await engine.listIncomingDms(accountId, since)
+  // اول وب (درخواست‌های پیام را هم می‌بیند)، اگر نشد API رسمی. وصل بودن هر
+  // سه روش دقیقا برای همین است: یکی از کار بیفتد، بقیه ادامه می‌دهند.
+  let useWeb = hasWeb
+  let dms
+  try {
+    dms = hasWeb ? await e.web.listIncomingDms(accountId, since) : await e.graph.listIncomingDms(accountId, since)
+  } catch (err) {
+    if (!(hasWeb && hasGraph)) throw err
+    logRepo.add({
+      account_id: accountId,
+      level: 'info',
+      category: 'dm',
+      message: 'خواندن دایرکت از راه وب نشد، از API رسمی خوانده شد',
+      meta: { error: (err as Error).message }
+    })
+    useWeb = false
+    dms = await e.graph.listIncomingDms(accountId, since)
+  }
   let handled = 0
   let latest = since
   for (const dm of dms) {

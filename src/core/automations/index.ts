@@ -238,12 +238,19 @@ export function startBroadcast(broadcastId: number): { ok: boolean; total: numbe
 
   const targets = resolveAudience(bc.account_id, filter)
   if (targets.length === 0) {
-    return {
-      ok: false,
-      total: 0,
-      message:
-        'گیرنده‌ای پیدا نشد. اگر مخاطب «فالوورها» است، ابتدا لیست فالوورها را همگام کنید (نیازمند موتور Session).'
+    // پیام قبلی همیشه درباره‌ی «فالوورها» حرف می‌زد، حتی وقتی گروه انتخاب‌شده
+    // چیز دیگری بود — کاربر فالوورها را همگام می‌کرد و همان خطا را دوباره می‌دید
+    const why: Record<string, string> = {
+      engaged_24h:
+        'این ارسال برای «کسانی که در ۲۴ ساعت اخیر پیام دادند» ساخته شده و در این مدت کسی به شما دایرکت نداده. یک ارسال جدید با گیرنده‌ی «فالوورهای من» بسازید.',
+      followers: 'لیست فالوورها خالی است. از صفحه‌ی مخاطبان «همگام‌سازی فالوورها» را بزنید.',
+      following: 'لیست فالووینگ خالی است. از صفحه‌ی مخاطبان «همگام‌سازی فالووینگ» را بزنید.',
+      mutual: 'هیچ فالوور متقابلی پیدا نشد. از صفحه‌ی مخاطبان هر دو لیست را همگام کنید.',
+      tag: 'هیچ مخاطبی این برچسب را ندارد.',
+      custom: 'لیست نام‌های کاربری خالی است.'
     }
+    const skip = filter.skipPrivate ? ' (حساب‌های خصوصی هم کنار گذاشته شده‌اند.)' : ''
+    return { ok: false, total: 0, message: 'گیرنده‌ای پیدا نشد. ' + (why[filter.audience] ?? '') + skip }
   }
 
   const total = broadcastsRepo.addTargets(broadcastId, targets)

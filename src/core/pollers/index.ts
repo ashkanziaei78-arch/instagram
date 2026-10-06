@@ -8,7 +8,12 @@ import {
 } from '../db/repos'
 import { engines } from '../engine'
 import { UnsupportedCapabilityError } from '../engine/types'
-import { enqueueWelcomeForNewFollowers, handleIncomingComment, onNewPostDetected } from '../automations'
+import {
+  enqueueWelcomeForNewFollowers,
+  handleIncomingComment,
+  handleIncomingDm,
+  onNewPostDetected
+} from '../automations'
 
 /* ══════════════════════════ نظرسنج فالوور ══════════════════════════ */
 
@@ -280,15 +285,65 @@ export async function pollComments(
   }
 }
 
+/* ══════════════════════════ نظرسنج دایرکت ══════════════════════════ */
+
+/**
+ * دایرکت‌های تازه را می‌خواند و به قوانین «کلیدواژه در دایرکت» می‌دهد.
+ *
+ * بدون این، آن قوانین فقط با وبهوک کار می‌کردند — یعنی برای اکثر کاربرها که
+ * وبهوک (و تونل و داشبورد متا) را راه نینداخته‌اند، اصلا کار نمی‌کردند.
+ *
+ * موتور وب ترجیح دارد چون درخواست‌های پیام (Requests) را هم می‌بیند؛ مخاطب
+ * «کلمه‌ی X را دایرکت کن» معمولا هنوز شما را فالو نمی‌کند و پیامش همان‌جاست.
+ *
+ * خط‌مبنا: بار اول فقط زمان را ثبت می‌کند. وگرنه با روشن‌شدن اپ به تمام
+ * دایرکت‌های قدیمی که کلیدواژه داشتند یک‌جا جواب می‌رفت.
+ */
+export async function pollInbox(accountId: number): Promise<{ ok: boolean; handled: number; message: string }> {
+  const e = engines()
+  const useWeb = e.web.isConnected(accountId)
+  const engine = useWeb ? e.web : e.graph.isConnected(accountId) ? e.graph : null
+  if (!engine?.listIncomingDms) return { ok: false, handled: 0, message: 'هیچ اتصالی برای خواندن دایرکت نیست' }
+
+  const key = 'inboxSince:' + accountId
+  const since = settingsRepo.get<number>(key, 0)
+  if (!since) {
+    settingsRepo.set(key, Date.now())
+    return { ok: true, handled: 0, message: 'خط‌مبنای دایرکت‌ها ثبت شد' }
+  }
+
+  const dms = await engine.listIncomingDms(accountId, since)
+  let handled = 0
+  let latest = since
+  for (const dm of dms) {
+    latest = Math.max(latest, dm.timestamp)
+    const r = await handleIncomingDm({
+      accountId,
+      fromUserId: dm.from_user_id,
+      fromUsername: dm.from_username,
+      text: dm.text,
+      messageId: dm.message_id,
+      idSource: useWeb ? 'web' : 'graph'
+    })
+    if (r.handled) handled++
+  }
+  // بعد از پردازش جلو می‌بریم، نه قبل — اگر وسط کار کرش کند، دفعه‌ی بعد دوباره
+  // امتحان می‌شود و dedupe_key صف جلوی ارسال تکراری را می‌گیرد
+  settingsRepo.set(key, latest)
+  return { ok: true, handled, message: dms.length + ' دایرکت تازه، ' + handled + ' قانون فعال شد' }
+}
+
 /* ══════════════════════════ زمان‌بند ══════════════════════════ */
 
 export interface PollerIntervals {
+  inboxMs: number
   commentsMs: number
   mediaMs: number
   followersMs: number
 }
 
 const DEFAULT_INTERVALS: PollerIntervals = {
+  inboxMs: 90 * 1000, // هر ۹۰ ثانیه — دایرکت باید سریع جواب بگیرد
   commentsMs: 3 * 60 * 1000, // هر ۳ دقیقه
   mediaMs: 15 * 60 * 1000, // هر ۱۵ دقیقه
   followersMs: 60 * 60 * 1000 // هر ساعت — گران‌ترین عملیات است
@@ -326,9 +381,27 @@ export class PollerScheduler {
 
     this.timers.push(
       setInterval(() => {
+        void forEachAccount('خواندن دایرکت‌ها', (id) => pollInbox(id))
+      }, iv.inboxMs)
+    )
+    this.timers.push(
+      setInterval(() => {
         void forEachAccount('نظرسنجی کامنت', (id) => pollComments(id))
       }, iv.commentsMs)
     )
+
+    // دور اول را منتظر اولین تیک نمی‌مانیم: فالوورها هر ساعت تیک می‌خورند، پس
+    // بدون این، تا یک ساعت بعد از باز کردن اپ لیست مخاطبان خالی بود و ارسال
+    // گروهی «گیرنده‌ای پیدا نشد» می‌داد. با فاصله اجرا می‌شوند تا هم‌زمان نباشند.
+    const kickoff: [number, string, (id: number) => Promise<unknown>][] = [
+      [10_000, 'خواندن دایرکت‌ها', (id) => pollInbox(id)],
+      [20_000, 'همگام‌سازی پست‌ها', (id) => pollMedia(id)],
+      [40_000, 'همگام‌سازی فالوورها', (id) => pollFollowers(id)],
+      [60_000, 'نظرسنجی کامنت', (id) => pollComments(id)]
+    ]
+    for (const [delay, label, fn] of kickoff) {
+      this.timers.push(setTimeout(() => void forEachAccount(label, fn), delay))
+    }
     this.timers.push(
       setInterval(() => {
         void forEachAccount('همگام‌سازی پست‌ها', (id) => pollMedia(id))
@@ -344,7 +417,10 @@ export class PollerScheduler {
   }
 
   stop(): void {
-    for (const t of this.timers) clearInterval(t)
+    for (const t of this.timers) {
+      clearInterval(t)
+      clearTimeout(t)
+    }
     this.timers = []
     this.running = false
   }

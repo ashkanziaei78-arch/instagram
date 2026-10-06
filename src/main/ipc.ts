@@ -521,8 +521,28 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         })
       ),
 
-    startBroadcast: (p: { broadcastId: number }) => {
-      const r = startBc(p.broadcastId)
+    startBroadcast: async (p: { broadcastId: number }) => {
+      let r = startBc(p.broadcastId)
+
+      // لیست خالی معمولا یعنی «هنوز همگام نشده»، نه «فالوور نداری». به‌جای اینکه
+      // کاربر را دنبال یک دکمه‌ی دیگر بفرستیم، همین‌جا همگام می‌کنیم و دوباره
+      // امتحان می‌کنیم. همگام‌سازی اول فقط خط‌مبنا می‌سازد و پیام خوشامد نمی‌فرستد.
+      if (!r.ok && r.total === 0) {
+        const bc = broadcastsRepo.byId(p.broadcastId)
+        if (bc) {
+          const audience = (JSON.parse(bc.filter_json || '{}') as { audience?: string }).audience
+          if (audience === 'custom' || audience === 'tag' || audience === 'engaged_24h') {
+            return fail(r.message)
+          }
+          const f = await pollFollowers(bc.account_id)
+          if (!f.ok) return fail('همگام‌سازی فالوورها ناموفق بود: ' + f.message)
+          if (audience === 'following' || audience === 'mutual') {
+            const g = await syncFollowing(bc.account_id)
+            if (!g.ok) return fail('همگام‌سازی فالووینگ‌ها ناموفق بود: ' + g.message)
+          }
+          r = startBc(p.broadcastId)
+        }
+      }
       return r.ok ? ok({ total: r.total, message: r.message }) : fail(r.message)
     },
 

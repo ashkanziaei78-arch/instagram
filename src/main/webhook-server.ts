@@ -228,7 +228,8 @@ export class WebhookServer {
             accountId: account.id,
             fromUserId: senderId,
             text,
-            messageId: m.message?.mid
+            messageId: m.message?.mid,
+            idSource: 'graph'
           })
         }
       }

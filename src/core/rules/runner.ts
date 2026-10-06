@@ -15,6 +15,8 @@ export interface TriggerContext {
   postLink?: string
   /** متن خام تریگر (کامنت یا دایرکت) */
   rawText?: string
+  /** شناسه‌ی کاربر از کدام موتور آمده — جواب باید از همان برود */
+  idSource?: 'web' | 'graph'
 }
 
 export function templateVarsFrom(ctx: TriggerContext): TemplateVars {
@@ -67,7 +69,8 @@ export function enqueueRuleActions(rule: Rule, ctx: TriggerContext): number {
             ruleId: rule.id,
             // حضور commentId باعث می‌شود از مسیر private reply برود که
             // نیازی به پنجره‌ی ۲۴ ساعته ندارد
-            commentId: ctx.commentId
+            commentId: ctx.commentId,
+            idSource: ctx.idSource
           }
         })
         if (id !== null) queued++

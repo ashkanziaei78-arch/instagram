@@ -114,7 +114,16 @@ export class EngineManager {
     accountId: number,
     recipientIgId: string,
     text: string,
-    opts: { commentId?: string; buttons?: { title: string; url: string }[] } = {}
+    opts: {
+      commentId?: string
+      buttons?: { title: string; url: string }[]
+      /**
+       * شناسه‌ی گیرنده از کدام موتور آمده. شناسه‌ی کاربر در وب (pk) و در API
+       * رسمی (IGSID) دو عدد متفاوت برای یک نفرند؛ فرستادن pk به API رسمی خطای
+       * «گیرنده نامعتبر» می‌دهد. پس جواب باید از همان راهی برود که پیام آمد.
+       */
+      idSource?: 'web' | 'graph'
+    } = {}
   ): Promise<{ via: EngineKind; method: 'private_reply' | 'dm' }> {
     // مسیر ۱: پاسخ خصوصی به کامنت
     if (opts.commentId && this.graph.isConnected(accountId)) {
@@ -122,10 +131,20 @@ export class EngineManager {
       return { via: 'graph', method: 'private_reply' }
     }
 
-    // مسیر ۲: پنجره‌ی ۲۴ ساعته باز است
-    if (this.graph.isConnected(accountId) && contactsRepo.isWindowOpen(accountId, recipientIgId)) {
-      await this.graph.sendDm(accountId, recipientIgId, text, { buttons: opts.buttons })
-      return { via: 'graph', method: 'dm' }
+    // مسیر ۲: پنجره‌ی ۲۴ ساعته باز است — فقط اگر شناسه مال API رسمی باشد
+    if (
+      opts.idSource !== 'web' &&
+      this.graph.isConnected(accountId) &&
+      contactsRepo.isWindowOpen(accountId, recipientIgId)
+    ) {
+      try {
+        await this.graph.sendDm(accountId, recipientIgId, text, { buttons: opts.buttons })
+        return { via: 'graph', method: 'dm' }
+      } catch (e) {
+        // اگر موتور ساده هم وصل است، شکست رسمی (معمولا شناسه‌ی ناسازگار) نباید
+        // پیام را از دست بدهد؛ وگرنه همان خطا بالا برود
+        if (!this.web.isConnected(accountId) && !this.session.isConnected(accountId)) throw e
+      }
     }
 
     // مسیر ۳: دایرکت سرد

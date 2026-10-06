@@ -284,7 +284,7 @@ export function SettingsPage({ hasGraphAccount }: { hasGraphAccount: boolean }):
             checked={pollersOn}
             onChange={(v) => void togglePollers(v)}
             label="نظرسنجی دوره‌ای"
-            hint="کامنت‌ها هر ۳ دقیقه، پست‌ها هر ۱۵ دقیقه، فالوورها هر ساعت بررسی می‌شوند. بدون نیاز به تنظیم شبکه کار می‌کند."
+            hint="دایرکت‌ها هر ۹۰ ثانیه، کامنت‌ها هر ۳ دقیقه، پست‌ها هر ۱۵ دقیقه، فالوورها هر ساعت بررسی می‌شوند. بدون نیاز به تنظیم شبکه کار می‌کند."
           />
           <Toggle
             checked={webhookOn}

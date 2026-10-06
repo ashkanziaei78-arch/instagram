@@ -491,7 +491,56 @@ async function run(): Promise<void> {
     fo.detach(ACC)
   }
 
-  console.log('\n=== 13. نشست خراب ===')
+  console.log('\n=== 13. خواندن دایرکت‌های ورودی ===')
+  {
+    const ib = new WebEngine(store)
+    const ACC = 88
+    ib.attach(ACC, SESSION) // ds_user_id = 12345 یعنی «خودم»
+    const us = (ms: number): string => String(ms * 1000) // API میکروثانیه می‌دهد
+    captured = []
+    responseQueue.length = 0
+    responseQueue.push({
+      status: 200,
+      body: JSON.stringify({
+        inbox: {
+          threads: [
+            {
+              users: [{ pk: 777, username: 'buyer' }],
+              items: [
+                { item_id: 'i1', user_id: 777, timestamp: us(2_000), item_type: 'text', text: '20' },
+                { item_id: 'i2', user_id: 12345, timestamp: us(3_000), item_type: 'text', text: 'جواب خودم' },
+                { item_id: 'i3', user_id: 777, timestamp: us(4_000), item_type: 'media_share' },
+                { item_id: 'i0', user_id: 777, timestamp: us(500), item_type: 'text', text: 'قدیمی' }
+              ]
+            }
+          ]
+        }
+      })
+    })
+    responseQueue.push({
+      status: 200,
+      body: JSON.stringify({
+        inbox: {
+          threads: [
+            {
+              users: [{ pk: 888, username: 'stranger' }],
+              items: [{ item_id: 'p1', user_id: 888, timestamp: us(1_500), item_type: 'text', text: 'سلام 20' }]
+            }
+          ]
+        }
+      })
+    })
+    const dms = await ib.listIncomingDms(ACC, 1_000)
+    check('هم صندوق اصلی و هم درخواست‌ها خوانده شد', captured.length === 2 &&
+      captured[1].url.includes('pending_inbox'))
+    check('پیام خودم، غیرمتنی و قدیمی‌تر از خط‌مبنا رد شد', dms.length === 2, dms.map((d) => d.message_id))
+    check('میکروثانیه به میلی‌ثانیه تبدیل شد', dms.every((d) => d.timestamp >= 1_500 && d.timestamp <= 2_000))
+    check('به ترتیب زمان', dms[0].message_id === 'p1' && dms[1].message_id === 'i1')
+    check('نام فرستنده از لیست کاربران گفت‌وگو', dms[1].from_username === 'buyer' && dms[0].from_username === 'stranger')
+    ib.detach(ACC)
+  }
+
+  console.log('\n=== 14. نشست خراب ===')
   const broken = new WebEngine({
     load: (_id, origin) => (origin === 'window' ? '{ not json' : null),
     save: () => undefined,

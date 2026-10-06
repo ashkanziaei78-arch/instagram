@@ -115,6 +115,7 @@ export interface IncomingDm {
   fromUsername?: string
   text: string
   messageId?: string
+  idSource?: 'web' | 'graph'
 }
 
 export async function handleIncomingDm(d: IncomingDm): Promise<{ handled: boolean; reason: string }> {
@@ -140,7 +141,8 @@ export async function handleIncomingDm(d: IncomingDm): Promise<{ handled: boolea
     accountId: d.accountId,
     userIgId: d.fromUserId,
     username: d.fromUsername,
-    rawText: d.text
+    rawText: d.text,
+    idSource: d.idSource
   })
 
   return { handled: queued > 0, reason: 'قانون «' + match.rule.name + '» فعال شد' }
@@ -348,7 +350,8 @@ export function registerJobHandlers(): void {
       try {
         const res = await engines().sendDmSmart(job.account_id, recipientIgId, text, {
           commentId,
-          buttons
+          buttons,
+          idSource: payload.idSource === 'web' || payload.idSource === 'graph' ? payload.idSource : undefined
         })
 
         contactsRepo.markOutbound(job.account_id, recipientIgId)

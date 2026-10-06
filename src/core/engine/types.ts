@@ -41,6 +41,16 @@ export interface IgComment {
   parent_id?: string
 }
 
+/** یک پیام دایرکت ورودی که نظرسنجی صندوق پیدا کرده */
+export interface IgDm {
+  message_id: string
+  from_user_id: string
+  from_username?: string
+  text: string
+  /** میلی‌ثانیه‌ی یونیکس */
+  timestamp: number
+}
+
 export interface IgProfile {
   ig_user_id: string
   username: string
@@ -82,6 +92,12 @@ export interface IEngine {
 
   listFollowers(accountId: number, limit?: number): Promise<IgUser[]>
   listFollowing(accountId: number, limit?: number): Promise<IgUser[]>
+
+  /**
+   * پیام‌های متنی ورودی جدیدتر از `sinceMs`. برای وقتی وبهوک خاموش است — بدون
+   * این، قانون «کلیدواژه در دایرکت» هرگز فعال نمی‌شد.
+   */
+  listIncomingDms?(accountId: number, sinceMs: number): Promise<IgDm[]>
 }
 
 export class UnsupportedCapabilityError extends Error {

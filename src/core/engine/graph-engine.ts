@@ -6,6 +6,7 @@ import {
   UnsupportedCapabilityError,
   type IEngine,
   type IgComment,
+  type IgDm,
   type IgInsights,
   type IgMedia,
   type IgProfile,
@@ -379,6 +380,33 @@ export class GraphEngine implements IEngine {
       },
       context: 'ارسال دایرکت'
     })
+  }
+
+  /**
+   * دایرکت‌های ورودی از مسیر /me/conversations — جایگزین وبهوک وقتی خاموش است.
+   * شناسه‌ی فرستنده‌ها IGSID است، همان چیزی که sendDm همین موتور لازم دارد.
+   */
+  async listIncomingDms(accountId: number, sinceMs: number): Promise<IgDm[]> {
+    const me = this.igUserId(accountId)
+    type Msg = { id: string; created_time?: string; message?: string; from?: { id?: string; username?: string } }
+    const d = await this.request<{ data?: { messages?: { data?: Msg[] } }[] }>(accountId, '/me/conversations', {
+      query: {
+        platform: 'instagram',
+        limit: '20',
+        fields: 'messages.limit(10){id,created_time,message,from}'
+      },
+      context: 'خواندن دایرکت‌ها'
+    })
+    const out: IgDm[] = []
+    for (const conv of d.data ?? []) {
+      for (const m of conv.messages?.data ?? []) {
+        const from = m.from?.id ?? ''
+        const ts = m.created_time ? Date.parse(m.created_time) : 0
+        if (!from || from === me || !m.message || ts <= sinceMs) continue
+        out.push({ message_id: m.id, from_user_id: from, from_username: m.from?.username, text: m.message, timestamp: ts })
+      }
+    }
+    return out.sort((a, b) => a.timestamp - b.timestamp)
   }
 
   /* ─────────────────────────── فالوورها: پشتیبانی نمی‌شود ─────────────────────────── */

@@ -9,6 +9,7 @@ import {
   type IgInsights,
   type IgMedia,
   type IgProfile,
+  type IgDm,
   type IgUser,
   type SendDmOptions
 } from './types'
@@ -732,6 +733,48 @@ export class WebEngine implements IEngine {
       await new Promise((r) => setTimeout(r, 1500 + Math.random() * 2000))
       await send(links)
     }
+  }
+
+  /**
+   * دایرکت‌های ورودی تازه — از صندوق اصلی *و* درخواست‌های پیام.
+   *
+   * چرا درخواست‌ها هم: کسی که شما را فالو نمی‌کند و برای اولین بار پیام می‌دهد
+   * (یعنی دقیقا مخاطب «کلمه‌ی X را بفرست») در صندوق اصلی نیست، در Requests است.
+   * فقط صندوق اصلی را خواندن یعنی بیشتر تریگرها بی‌صدا از دست بروند.
+   *
+   * زمان در این API میکروثانیه است، نه میلی‌ثانیه.
+   */
+  async listIncomingDms(accountId: number, sinceMs: number): Promise<IgDm[]> {
+    const me = this.pk(accountId)
+    const out: IgDm[] = []
+
+    type Thread = {
+      users?: { pk?: string | number; username?: string }[]
+      items?: { item_id?: string; user_id?: string | number; timestamp?: string | number; item_type?: string; text?: string }[]
+    }
+
+    for (const path of ['/api/v1/direct_v2/inbox/', '/api/v1/direct_v2/pending_inbox/']) {
+      const d = await this.request<{ inbox?: { threads?: Thread[] } }>(accountId, path, {
+        query: { persistentBadging: 'true', limit: '20', thread_message_limit: '10' },
+        context: 'خواندن دایرکت‌ها'
+      })
+      for (const t of d.inbox?.threads ?? []) {
+        const names = new Map((t.users ?? []).map((u) => [String(u.pk), u.username]))
+        for (const it of t.items ?? []) {
+          const from = String(it.user_id ?? '')
+          const ts = Math.floor(Number(it.timestamp ?? 0) / 1000)
+          if (!from || from === me || it.item_type !== 'text' || !it.text || ts <= sinceMs) continue
+          out.push({
+            message_id: String(it.item_id ?? from + ':' + ts),
+            from_user_id: from,
+            from_username: names.get(from),
+            text: it.text,
+            timestamp: ts
+          })
+        }
+      }
+    }
+    return out.sort((a, b) => a.timestamp - b.timestamp)
   }
 
   /* ─────────────────────────── فالوورها ─────────────────────────── */

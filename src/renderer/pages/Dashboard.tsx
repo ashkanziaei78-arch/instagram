@@ -275,7 +275,7 @@ export function DashboardPage({
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-slate-500">
-              کامنت‌ها هر ۳ دقیقه، پست‌ها هر ۱۵ دقیقه، فالوورها هر ساعت
+              دایرکت‌ها هر ۹۰ ثانیه، کامنت‌ها هر ۳ دقیقه، پست‌ها هر ۱۵ دقیقه، فالوورها هر ساعت
             </p>
           </div>
         </div>

@@ -44,7 +44,7 @@ import {
   parseSessionId
 } from './auth/session-id-login'
 import { secureStore } from './secure-store'
-import { generateReply, getAiSettings, setAiSettings } from '../core/ai/reply'
+import { generateReply, getAiSettings, setAiSettings, type AiProvider } from '../core/ai/reply'
 import { startWebhookFromSettings, webhookServer } from './webhook-server'
 
 const ok = <T>(data?: T): ApiResult<T> => ({ ok: true, data })
@@ -502,13 +502,24 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
     getPollerHealth: () => ok(pollerHealth()),
 
-    getAiSettings: () => ok({ ...getAiSettings(), hasKey: !!secureStore().getAiKey() }),
+    getAiSettings: () => {
+      const s = getAiSettings()
+      return ok({ ...s, hasKey: !!secureStore().getAiKey(s.provider) })
+    },
 
-    setAiSettings: (p: { enabled?: boolean; businessInfo?: string; baseUrl?: string; apiKey?: string }) => {
-      if (p.apiKey !== undefined) secureStore().setAiKey(p.apiKey.trim() || null)
-      const { apiKey: _k, ...rest } = p
+    setAiSettings: (p: {
+      enabled?: boolean
+      businessInfo?: string
+      baseUrl?: string
+      provider?: AiProvider
+      model?: string
+      apiKey?: string
+    }) => {
+      const { apiKey, ...rest } = p
       const next = setAiSettings(rest)
-      return ok({ ...next, hasKey: !!secureStore().getAiKey() })
+      // کلید مال سرویس‌دهنده‌ای است که *بعد از* این ذخیره انتخاب شده
+      if (apiKey !== undefined) secureStore().setAiKey(next.provider, apiKey.trim() || null)
+      return ok({ ...next, hasKey: !!secureStore().getAiKey(next.provider) })
     },
 
     testAiReply: async (p: { text: string }) => ok({ reply: await generateReply(p.text) }),

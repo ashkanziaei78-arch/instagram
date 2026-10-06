@@ -43,8 +43,12 @@ export interface PollerHealth {
   error?: string
 }
 
+export type AiProviderId = 'claude' | 'grok' | 'openai' | 'gemini' | 'deepseek' | 'openrouter' | 'custom'
+
 export interface AiSettingsView {
   enabled: boolean
+  provider: AiProviderId
+  model: string
   businessInfo: string
   baseUrl: string
   /** فقط اینکه کلید وارد شده یا نه — خود کلید هرگز به رابط برنمی‌گردد */
@@ -138,7 +142,14 @@ export interface IpcApi {
   setIceBreakers(p: { accountId: number; questions: string[] }): Promise<ApiResult>
   getPollerHealth(): Promise<ApiResult<PollerHealth[]>>
   getAiSettings(): Promise<ApiResult<AiSettingsView>>
-  setAiSettings(p: { enabled?: boolean; businessInfo?: string; baseUrl?: string; apiKey?: string }): Promise<ApiResult<AiSettingsView>>
+  setAiSettings(p: {
+    enabled?: boolean
+    businessInfo?: string
+    baseUrl?: string
+    provider?: AiProviderId
+    model?: string
+    apiKey?: string
+  }): Promise<ApiResult<AiSettingsView>>
   /** امتحان جواب هوشمند بدون فرستادن چیزی */
   testAiReply(p: { text: string }): Promise<ApiResult<{ reply: string | null }>>
   setBroadcastAudience(p: { broadcastId: number; audience: BroadcastTargetFilter['audience'] }): Promise<ApiResult>

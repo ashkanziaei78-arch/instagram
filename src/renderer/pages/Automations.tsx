@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { MatchMode, Rule, RuleAction, TriggerType } from '../../shared/types'
 import { Card, EmptyState, Field, Modal, Notice, Select, Spinner, Toggle } from '../components/ui'
 import { call, callRaw, fmtFull, toasts } from '../lib/api'
-import type { AiSettingsView } from '../../shared/ipc'
+import type { AiProviderId, AiSettingsView } from '../../shared/ipc'
 
 const TRIGGERS: { value: TriggerType; label: string; desc: string }[] = [
   {
@@ -720,11 +720,23 @@ function RuleEditor({
  * جواب هوشمند (ایده از InstaAuto): وقتی هیچ قانونی به یک دایرکت نخورد، به‌جای
  * سکوت یک جواب کوتاه بر اساس توضیحی که خودت درباره‌ی کارت نوشته‌ای می‌رود.
  */
+/** فقط برای نمایش؛ پیش‌فرض‌های واقعی در core/ai/reply.ts است */
+const AI_PROVIDER_UI: Record<AiProviderId, { label: string; model: string; keyHint: string }> = {
+  claude: { label: 'Claude (انتروپیک)', model: 'claude-opus-5-5', keyHint: 'از console.anthropic.com' },
+  grok: { label: 'Grok (xAI)', model: 'grok-4', keyHint: 'از console.x.ai' },
+  openai: { label: 'ChatGPT (OpenAI)', model: 'gpt-4o-mini', keyHint: 'از platform.openai.com' },
+  gemini: { label: 'Gemini (گوگل)', model: 'gemini-2.5-flash', keyHint: 'از aistudio.google.com' },
+  deepseek: { label: 'DeepSeek', model: 'deepseek-chat', keyHint: 'از platform.deepseek.com' },
+  openrouter: { label: 'OpenRouter (همه‌ی مدل‌ها با یک کلید)', model: 'x-ai/grok-4', keyHint: 'از openrouter.ai' },
+  custom: { label: 'سرویس دیگر / واسط ایرانی', model: '', keyHint: 'کلیدی که آن سرویس به تو داده' }
+}
+
 function AiReplyCard(): JSX.Element {
   const [s, setS] = useState<AiSettingsView | null>(null)
   const [info, setInfo] = useState('')
   const [key, setKey] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
+  const [model, setModel] = useState('')
   const [testText, setTestText] = useState('')
   const [testOut, setTestOut] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -735,6 +747,7 @@ function AiReplyCard(): JSX.Element {
       setS(v)
       setInfo(v.businessInfo)
       setBaseUrl(v.baseUrl)
+      setModel(v.model)
     })
   }, [])
 
@@ -775,9 +788,27 @@ function AiReplyCard(): JSX.Element {
           />
         </Field>
 
+        <Field label="کدام هوش مصنوعی؟">
+          <Select
+            value={s.provider}
+            onChange={(v) => {
+              // سرویس‌دهنده‌ی تازه، مدل و آدرس خودش را دارد — مقادیر قبلی را نگه نمی‌داریم
+              setModel('')
+              setBaseUrl('')
+              setKey('')
+              void call('setAiSettings', { provider: v as AiProviderId, model: '', baseUrl: '' }).then((nv) => nv && setS(nv))
+            }}
+            options={(Object.keys(AI_PROVIDER_UI) as AiProviderId[]).map((id) => ({ value: id, label: AI_PROVIDER_UI[id].label }))}
+          />
+        </Field>
+
         <Field
           label="کلید"
-          hint={s.hasKey ? 'کلید ذخیره شده است. برای عوض کردن، کلید تازه را بنویس.' : 'کلید API انتروپیک (Claude) — از console.anthropic.com'}
+          hint={
+            s.hasKey
+              ? 'کلید ذخیره شده است. برای عوض کردن، کلید تازه را بنویس.'
+              : 'کلید API ' + AI_PROVIDER_UI[s.provider].keyHint
+          }
         >
           <input
             className="input"
@@ -785,23 +816,45 @@ function AiReplyCard(): JSX.Element {
             type="password"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder={s.hasKey ? '••••••••' : 'sk-ant-…'}
+            placeholder={s.hasKey ? '••••••••' : 'کلید را اینجا بچسبان'}
           />
         </Field>
 
-        <details>
-          <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">
-            از ایران وصل نمی‌شود؟
-          </summary>
-          <Field label="آدرس واسط" hint="آدرس یک واسطِ سازگار با API انتروپیک. خالی = آدرس اصلی.">
-            <input className="input" dir="ltr" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://…" />
-          </Field>
-        </details>
+        {s.provider === 'custom' ? (
+          <>
+            <Field label="آدرس سرویس" hint="آدرس API سازگار با OpenAI، معمولا با /v1 تمام می‌شود">
+              <input className="input" dir="ltr" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://…/v1" />
+            </Field>
+            <Field label="نام مدل" hint="نامی که آن سرویس در پنلش نوشته">
+              <input className="input" dir="ltr" value={model} onChange={(e) => setModel(e.target.value)} />
+            </Field>
+          </>
+        ) : (
+          <details>
+            <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">
+              مدل دیگر یا آدرس واسط (اختیاری)
+            </summary>
+            <div className="mt-2 space-y-3">
+              <Field label="نام مدل" hint="خالی = پیش‌فرض. اگر سرویس گفت مدل پیدا نشد، نام دقیق را از پنل خودش اینجا بنویس.">
+                <input
+                  className="input"
+                  dir="ltr"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder={AI_PROVIDER_UI[s.provider].model}
+                />
+              </Field>
+              <Field label="آدرس واسط" hint="اگر از ایران مستقیم وصل نمی‌شود، آدرس یک واسط سازگار. خالی = آدرس اصلی.">
+                <input className="input" dir="ltr" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://…" />
+              </Field>
+            </div>
+          </details>
+        )}
 
         <button
           className="btn-primary"
           onClick={() => {
-            void save({ businessInfo: info, baseUrl, ...(key.trim() ? { apiKey: key.trim() } : {}) }).then(() => setKey(''))
+            void save({ businessInfo: info, baseUrl, model, ...(key.trim() ? { apiKey: key.trim() } : {}) }).then(() => setKey(''))
           }}
         >
           ذخیره

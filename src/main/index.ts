@@ -157,7 +157,7 @@ async function bootstrap(): Promise<void> {
   registerJobHandlers()
   jobQueue.start(5000)
 
-  setAiKeyProvider(() => secureStore().getAiKey())
+  setAiKeyProvider((provider) => secureStore().getAiKey(provider))
 
   // نسخه‌های قبلی یک حساب را که با دو روش وصل می‌شد دو ردیف جدا ثبت می‌کردند
   // (هر روش شناسه‌ی متفاوتی برمی‌گرداند). اینجا یکی‌شان می‌کنیم: ردیفی که API

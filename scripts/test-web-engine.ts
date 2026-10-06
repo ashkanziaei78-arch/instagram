@@ -16,6 +16,7 @@ import { initDb, closeDb } from '../src/core/db/index'
 import { accountsRepo, rulesRepo, jobsRepo } from '../src/core/db/repos'
 import { initEngines } from '../src/core/engine/index'
 import { pollInbox } from '../src/core/pollers/index'
+import { generateReply, setAiKeyProvider, setAiSettings } from '../src/core/ai/reply'
 import { existsSync, rmSync } from 'node:fs'
 
 const DB = './scratch-web.sqlite'
@@ -663,7 +664,41 @@ async function run(): Promise<void> {
     responseQueue.length = 0
   }
 
-  console.log('\n=== 17. نشست خراب ===')
+  console.log('\n=== 17. جواب هوشمند با Grok و سرویس‌های سازگار ===')
+  {
+    setAiKeyProvider((p) => (p === 'grok' ? 'xai-KEY' : null))
+    setAiSettings({ enabled: true, provider: 'grok', model: '', baseUrl: '', businessInfo: 'فروشگاه کفش' })
+    captured = []
+    responseQueue.length = 0
+    responseQueue.push({ status: 200, body: JSON.stringify({ choices: [{ message: { content: ' سلام! بله ارسال داریم ' } }] }) })
+    const reply = await generateReply('ارسال دارید؟', 'ali')
+    check('به آدرس Grok رفت', captured[0]?.url === 'https://api.x.ai/v1/chat/completions', captured[0]?.url)
+    check('کلید در هدر Authorization', captured[0]?.headers.Authorization === 'Bearer xai-KEY')
+    const body = JSON.parse(captured[0]?.body ?? '{}') as { model: string; messages: { role: string; content: string }[] }
+    check('مدل پیش‌فرض Grok', body.model === 'grok-4', body.model)
+    check('اطلاعات کسب‌وکار در پیام سیستم', body.messages[0].role === 'system' && body.messages[0].content.includes('فروشگاه کفش'))
+    check('جواب تمیز برگشت', reply === 'سلام! بله ارسال داریم', reply)
+
+    responseQueue.push({ status: 401, body: JSON.stringify({ error: { message: 'Incorrect API key' } }) })
+    try {
+      await generateReply('سلام')
+      check('خطای سرویس با متن خودش', false)
+    } catch (e) {
+      check('خطای سرویس با متن خودش', (e as Error).message.includes('Incorrect API key'), (e as Error).message)
+    }
+
+    setAiSettings({ provider: 'deepseek' })
+    try {
+      await generateReply('سلام')
+      check('سرویس بدون کلید خطای روشن می‌دهد', false)
+    } catch (e) {
+      check('سرویس بدون کلید خطای روشن می‌دهد', (e as Error).message.includes('DeepSeek'), (e as Error).message)
+    }
+    setAiSettings({ enabled: false })
+    responseQueue.length = 0
+  }
+
+  console.log('\n=== 18. نشست خراب ===')
   const broken = new WebEngine({
     load: (_id, origin) => (origin === 'window' ? '{ not json' : null),
     save: () => undefined,

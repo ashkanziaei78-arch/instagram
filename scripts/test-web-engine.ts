@@ -610,7 +610,60 @@ async function run(): Promise<void> {
     }
   }
 
-  console.log('\n=== 15. نشست خراب ===')
+  console.log('\n=== 15. جواب استوری و منشن به قانون مخصوص خودشان می‌رسند ===')
+  {
+    const acc = accountsRepo.byIgId('12345')!
+    rulesRepo.create({
+      account_id: acc.id, name: 'استوری', trigger_type: 'story_reply', match_mode: 'contains', keywords: '',
+      actions: [{ type: 'send_dm', text: 'مرسی', order: 0 }]
+    } as never)
+    rulesRepo.create({
+      account_id: acc.id, name: 'منشن', trigger_type: 'mention', match_mode: 'contains', keywords: '',
+      actions: [{ type: 'send_dm', text: 'ممنون از منشن', order: 0 }]
+    } as never)
+    const igNow = 1_700_000_100_000
+    const us = (ms: number): string => String(ms * 1000)
+    const realNow = Date.now
+    Date.now = () => igNow
+    try {
+      responseQueue.length = 0
+      responseQueue.push(
+        { status: 200, body: JSON.stringify({ inbox: { threads: [{ users: [{ pk: 901, username: 'fan' }], items: [
+          { item_id: 's1', user_id: 901, timestamp: us(igNow + 60_000), item_type: 'reel_share', reel_share: { type: 'reply', text: 'عالی بود' } },
+          { item_id: 's2', user_id: 901, timestamp: us(igNow + 61_000), item_type: 'reel_share', reel_share: { type: 'mention' } }
+        ] }] } }) },
+        { status: 200, body: JSON.stringify({ inbox: { threads: [] } }) }
+      )
+      const r = await pollInbox(acc.id)
+      check('جواب استوری و منشن هر دو قانون را فعال کردند', r.handled === 2, r.message)
+      const texts = jobsRepo.list(100).filter((j) => j.kind === 'dm.send').map((j) => String(JSON.parse(String(j.payload)).text))
+      check('هر کدام پیام قانون خودش را گرفت', texts.includes('مرسی') && texts.includes('ممنون از منشن'), texts)
+    } finally {
+      Date.now = realNow
+      responseQueue.length = 0
+    }
+  }
+
+  console.log('\n=== 16. «اول فالو کن» ===')
+  {
+    const acc = accountsRepo.byIgId('12345')!
+    const mgr = initEngines({
+      tokenProvider: () => null,
+      sessionStore: { load: () => null, save: () => undefined, clear: () => undefined },
+      webSessionStore: store
+    })
+    responseQueue.length = 0
+    responseQueue.push({ status: 200, body: JSON.stringify({ followed_by: false }) })
+    check('فالو نکرده تشخیص داده شد', (await mgr.isFollower(acc.id, '901', 'web')) === false)
+    responseQueue.push({ status: 200, body: JSON.stringify({ followed_by: true }) })
+    check('فالو کرده تشخیص داده شد', (await mgr.isFollower(acc.id, '901', 'web')) === true)
+    // اگر بررسی زنده شکست بخورد، لیست همگام‌شده ملاک است نه «بله» کورکورانه
+    responseQueue.push({ status: 500, body: 'oops' }, { status: 500, body: 'oops' })
+    check('بررسی ناموفق → از لیست همگام‌شده (نیست = نه)', (await mgr.isFollower(acc.id, '901', 'web')) === false)
+    responseQueue.length = 0
+  }
+
+  console.log('\n=== 17. نشست خراب ===')
   const broken = new WebEngine({
     load: (_id, origin) => (origin === 'window' ? '{ not json' : null),
     save: () => undefined,

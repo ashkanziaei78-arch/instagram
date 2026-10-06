@@ -36,6 +36,21 @@ export interface DashboardStats {
   pollers: boolean
 }
 
+export interface PollerHealth {
+  label: string
+  at: number
+  ok: boolean
+  error?: string
+}
+
+export interface AiSettingsView {
+  enabled: boolean
+  businessInfo: string
+  baseUrl: string
+  /** فقط اینکه کلید وارد شده یا نه — خود کلید هرگز به رابط برنمی‌گردد */
+  hasKey: boolean
+}
+
 export interface InboxView {
   source: 'web' | 'graph'
   /** چرا راه دیگر امتحان شد، اگر شد */
@@ -119,6 +134,13 @@ export interface IpcApi {
   listContacts(p: { accountId: number; audience?: string; limit?: number }): Promise<ApiResult<ContactSummary[]>>
   syncFollowers(p: { accountId: number }): Promise<ApiResult<{ total: number; newCount: number; welcomed: number; message: string }>>
   syncFollowing(p: { accountId: number }): Promise<ApiResult<{ total: number; message: string }>>
+  getIceBreakers(p: { accountId: number }): Promise<ApiResult<string[]>>
+  setIceBreakers(p: { accountId: number; questions: string[] }): Promise<ApiResult>
+  getPollerHealth(): Promise<ApiResult<PollerHealth[]>>
+  getAiSettings(): Promise<ApiResult<AiSettingsView>>
+  setAiSettings(p: { enabled?: boolean; businessInfo?: string; baseUrl?: string; apiKey?: string }): Promise<ApiResult<AiSettingsView>>
+  /** امتحان جواب هوشمند بدون فرستادن چیزی */
+  testAiReply(p: { text: string }): Promise<ApiResult<{ reply: string | null }>>
   setBroadcastAudience(p: { broadcastId: number; audience: BroadcastTargetFilter['audience'] }): Promise<ApiResult>
   deleteBroadcast(p: { broadcastId: number }): Promise<ApiResult>
   /** صندوق دایرکت — گفت‌وگوها با آخرین پیام‌ها */
@@ -195,6 +217,12 @@ export const IPC_CHANNELS: IpcChannel[] = [
   'pollInboxNow',
   'listInbox',
   'setBroadcastAudience',
+  'getAiSettings',
+  'getIceBreakers',
+  'setIceBreakers',
+  'getPollerHealth',
+  'setAiSettings',
+  'testAiReply',
   'deleteBroadcast',
   'sendInboxReply',
   'audienceCount',

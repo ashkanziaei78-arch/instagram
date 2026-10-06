@@ -24,7 +24,7 @@ import {
   resumeBroadcast as resumeBc,
   startBroadcast as startBc
 } from '../core/automations'
-import { pollFollowers, pollInbox, pollMedia, pollerScheduler, syncFollowing } from '../core/pollers'
+import { pollFollowers, pollInbox, pollMedia, pollerHealth, pollerScheduler, syncFollowing } from '../core/pollers'
 import { IPC_CHANNELS, type ApiResult, type IpcApi } from '../shared/ipc'
 import type { AccountRow, AccountWithLinks } from '../shared/types'
 import {
@@ -44,6 +44,7 @@ import {
   parseSessionId
 } from './auth/session-id-login'
 import { secureStore } from './secure-store'
+import { generateReply, getAiSettings, setAiSettings } from '../core/ai/reply'
 import { startWebhookFromSettings, webhookServer } from './webhook-server'
 
 const ok = <T>(data?: T): ApiResult<T> => ({ ok: true, data })
@@ -486,6 +487,31 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
           welcomed_at: c.welcomed_at
         }))
       ),
+
+    getIceBreakers: (p: { accountId: number }) =>
+      ok(settingsRepo.get<string[]>('iceBreakers:' + p.accountId, [])),
+
+    setIceBreakers: async (p: { accountId: number; questions: string[] }) => {
+      if (!engines().graph.isConnected(p.accountId)) {
+        return fail('سوال‌های آماده فقط با «API رسمی» کار می‌کنند', 'از صفحه‌ی «حساب من» اتصال رسمی را هم وصل کن')
+      }
+      await engines().graph.setIceBreakers(p.accountId, p.questions)
+      settingsRepo.set('iceBreakers:' + p.accountId, p.questions.filter((q) => q.trim()).slice(0, 4))
+      return ok()
+    },
+
+    getPollerHealth: () => ok(pollerHealth()),
+
+    getAiSettings: () => ok({ ...getAiSettings(), hasKey: !!secureStore().getAiKey() }),
+
+    setAiSettings: (p: { enabled?: boolean; businessInfo?: string; baseUrl?: string; apiKey?: string }) => {
+      if (p.apiKey !== undefined) secureStore().setAiKey(p.apiKey.trim() || null)
+      const { apiKey: _k, ...rest } = p
+      const next = setAiSettings(rest)
+      return ok({ ...next, hasKey: !!secureStore().getAiKey() })
+    },
+
+    testAiReply: async (p: { text: string }) => ok({ reply: await generateReply(p.text) }),
 
     setBroadcastAudience: (p: { broadcastId: number; audience: string }) =>
       broadcastsRepo.setAudience(p.broadcastId, p.audience)

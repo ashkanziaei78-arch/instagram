@@ -41,9 +41,12 @@ export interface IgComment {
   parent_id?: string
 }
 
+export type IgMessageKind = 'text' | 'story_reply' | 'story_mention'
+
 /** یک پیام دایرکت ورودی که نظرسنجی صندوق پیدا کرده */
 export interface IgDm {
   message_id: string
+  kind: IgMessageKind
   from_user_id: string
   from_username?: string
   text: string
@@ -57,7 +60,7 @@ export interface IgConversation {
   peer_username?: string
   /** از Requests آمده (کسی که شما را فالو نمی‌کند) */
   pending?: boolean
-  messages: { id: string; from_me: boolean; text: string; timestamp: number }[]
+  messages: { id: string; from_me: boolean; kind?: IgMessageKind; text: string; timestamp: number }[]
 }
 
 export interface IgProfile {
@@ -118,9 +121,12 @@ export function incomingFrom(convs: IgConversation[], sinceMs: number): IgDm[] {
   const out: IgDm[] = []
   for (const c of convs) {
     for (const m of c.messages) {
-      if (m.from_me || !m.text || m.timestamp < sinceMs) continue
+      const kind = m.kind ?? 'text'
+      // منشن در استوری متن ندارد ولی خودش رویداد است
+      if (m.from_me || m.timestamp < sinceMs || (kind !== 'story_mention' && !m.text)) continue
       out.push({
         message_id: m.id,
+        kind,
         from_user_id: c.peer_id,
         from_username: c.peer_username,
         text: m.text,

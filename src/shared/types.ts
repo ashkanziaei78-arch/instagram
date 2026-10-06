@@ -87,6 +87,12 @@ export interface RuleAction {
   buttons?: { title: string; url: string }[]
   /** تأخیر بر حسب ثانیه برای اکشن wait */
   seconds?: number
+  /**
+   * «اول فالو کن» (ایده از openinstadm و chatmany): اگر پر باشد و گیرنده ما را
+   * فالو نکند، به‌جای این پیام همین متن می‌رود و قانون برای او باز می‌ماند تا
+   * بعد از فالو دوباره امتحان کند.
+   */
+  followGate?: string
   order: number
 }
 

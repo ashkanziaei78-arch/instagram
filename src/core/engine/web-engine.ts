@@ -10,6 +10,7 @@ import {
   type IgMedia,
   type IgProfile,
   type IgConversation,
+  type IgMessageKind,
   type IgDm,
   incomingFrom,
   type IgUser,
@@ -755,16 +756,25 @@ export class WebEngine implements IEngine {
   private inboxHost: string | null = null
 
   private async inboxRequest<T>(accountId: number, path: string): Promise<T> {
+    return this.mobileFirst<T>(accountId, path, {
+      query: { persistentBadging: 'true', limit: '20', thread_message_limit: '10' },
+      context: 'خواندن دایرکت‌ها'
+    })
+  }
+
+  /** اول میزبان موبایل، بعد وب — میزبان موفق برای دفعه‌های بعد نگه داشته می‌شود */
+  private async mobileFirst<T>(
+    accountId: number,
+    path: string,
+    opts: { query?: Record<string, string>; context: string }
+  ): Promise<T> {
     const hosts = this.inboxHost
       ? [this.inboxHost]
       : ['https://i.instagram.com', 'https://www.instagram.com']
     let last: unknown
     for (const host of hosts) {
       try {
-        const d = await this.request<T>(accountId, host + path, {
-          query: { persistentBadging: 'true', limit: '20', thread_message_limit: '10' },
-          context: 'خواندن دایرکت‌ها'
-        })
+        const d = await this.request<T>(accountId, host + path, opts)
         this.inboxHost = host
         return d
       } catch (e) {
@@ -776,11 +786,36 @@ export class WebEngine implements IEngine {
     throw last
   }
 
+  /** آیا این کاربر *همین الان* ما را فالو می‌کند — برای «اول فالو کن، بعد لینک» */
+  async isFollower(accountId: number, userId: string): Promise<boolean> {
+    const d = await this.mobileFirst<{ followed_by?: boolean }>(
+      accountId,
+      '/api/v1/friendships/show/' + userId + '/',
+      { context: 'بررسی فالو' }
+    )
+    return d.followed_by === true
+  }
+
   async listConversations(accountId: number): Promise<IgConversation[]> {
     const me = this.pk(accountId)
     type Thread = {
       users?: { pk?: string | number; username?: string }[]
-      items?: { item_id?: string; user_id?: string | number; timestamp?: string | number; item_type?: string; text?: string }[]
+      items?: {
+        item_id?: string
+        user_id?: string | number
+        timestamp?: string | number
+        item_type?: string
+        text?: string
+        reel_share?: { type?: string; text?: string }
+      }[]
+    }
+    // جواب به استوری و منشن در استوری هم در دایرکت می‌آیند، ولی نه به‌صورت
+    // متن ساده — داخل reel_share. بدونِ این، تریگرهای استوری هرگز چیزی نمی‌دیدند.
+    const kindOf = (it: NonNullable<Thread['items']>[number]): IgMessageKind | null => {
+      if (it.item_type === 'text' && it.text) return 'text'
+      if (it.item_type === 'reel_share' && it.reel_share?.type === 'reply') return 'story_reply'
+      if (it.item_type === 'reel_share' && it.reel_share?.type === 'mention') return 'story_mention'
+      return null
     }
     const out: IgConversation[] = []
     for (const [path, pending] of [
@@ -796,11 +831,12 @@ export class WebEngine implements IEngine {
           peer_username: peer.username,
           pending,
           messages: (t.items ?? [])
-            .filter((it) => it.item_type === 'text' && it.text)
+            .filter((it) => kindOf(it) !== null)
             .map((it) => ({
               id: String(it.item_id ?? ''),
               from_me: String(it.user_id ?? '') === me,
-              text: it.text ?? '',
+              kind: kindOf(it) ?? 'text',
+              text: it.text ?? it.reel_share?.text ?? '',
               // این API میکروثانیه می‌دهد، نه میلی‌ثانیه
               timestamp: Math.floor(Number(it.timestamp ?? 0) / 1000)
             }))

@@ -2,32 +2,107 @@ import { useCallback, useEffect, useState } from 'react'
 import type { MatchMode, Rule, RuleAction, TriggerType } from '../../shared/types'
 import { Card, EmptyState, Field, Modal, Notice, Select, Spinner, Toggle } from '../components/ui'
 import { call, callRaw, fmtFull, toasts } from '../lib/api'
+import type { AiSettingsView } from '../../shared/ipc'
 
 const TRIGGERS: { value: TriggerType; label: string; desc: string }[] = [
   {
     value: 'comment_keyword',
-    label: 'کامنت با کلیدواژه یا عدد',
-    desc: 'کسی روی پست کامنت می‌گذارد که شامل کلیدواژه/عدد شماست → دایرکت می‌گیرد'
+    label: 'کامنت با یک کلمه یا عدد',
+    desc: 'کسی زیر پستت کلمه یا عدد مشخصی کامنت می‌کند و دایرکت می‌گیرد'
+  },
+  { value: 'comment_any', label: 'هر کامنتی', desc: 'به هر کامنتی زیر پست‌هایت جواب می‌دهد' },
+  { value: 'dm_keyword', label: 'کلمه در دایرکت', desc: 'کسی در دایرکت کلمه‌ی مشخصی می‌فرستد و جواب می‌گیرد' },
+  { value: 'story_reply', label: 'جواب به استوری', desc: 'کسی به استوری‌ات جواب می‌دهد و دایرکت می‌گیرد' },
+  { value: 'mention', label: 'منشن در استوری', desc: 'کسی تو را در استوری‌اش منشن می‌کند و تشکر می‌گیرد' },
+  { value: 'new_follower', label: 'فالوور جدید', desc: 'کسی فالوات می‌کند و پیام خوشامد می‌گیرد' },
+  { value: 'new_post', label: 'پست جدید گذاشتم', desc: 'وقتی پست جدید می‌گذاری، به فالوورهایت خبر داده می‌شود' }
+]
+
+/**
+ * الگوهای آماده — ایده از CampaignCue و openinstadm. کاربر به‌جای فهمیدن
+ * «تریگر» و «حالت تطبیق»، یک کارت با زبان ساده انتخاب می‌کند و فرم پر می‌شود.
+ */
+const TEMPLATES: { title: string; desc: string; icon: string; draft: Partial<Rule> }[] = [
+  {
+    icon: '💬',
+    title: 'کامنت → دایرکت',
+    desc: 'هر کس زیر پستت «۱» کامنت کند، لینک را در دایرکت می‌گیرد',
+    draft: {
+      name: 'کامنت ۱ → لینک',
+      trigger_type: 'comment_keyword',
+      match_mode: 'number',
+      keywords: '1',
+      actions: [
+        { type: 'send_dm', order: 0, text: '{سلام|درود} {{username}} جان! این هم لینکی که خواستی: https://' },
+        { type: 'reply_comment', order: 1, text: '{دایرکتت رو چک کن|برات فرستادم} 📩' }
+      ]
+    }
   },
   {
-    value: 'comment_any',
-    label: 'هر کامنتی',
-    desc: 'به هر کامنتی روی پست‌های انتخابی واکنش می‌دهد (مراقب باشید، حجم بالا می‌رود)'
+    icon: '✉️',
+    title: 'کلمه در دایرکت',
+    desc: 'هر کس در دایرکت «قیمت» بفرستد، جواب آماده می‌گیرد',
+    draft: {
+      name: 'قیمت در دایرکت',
+      trigger_type: 'dm_keyword',
+      match_mode: 'contains',
+      keywords: 'قیمت',
+      actions: [{ type: 'send_dm', order: 0, text: '{سلام|درود} {{username}}! قیمت‌ها اینجاست: https://' }]
+    }
   },
   {
-    value: 'dm_keyword',
-    label: 'کلیدواژه در دایرکت',
-    desc: 'کسی در دایرکت کلیدواژه می‌فرستد → پاسخ خودکار می‌گیرد'
+    icon: '📖',
+    title: 'جواب به استوری',
+    desc: 'هر کس به استوری‌ات جواب بدهد، پیام می‌گیرد',
+    draft: {
+      name: 'جواب استوری',
+      trigger_type: 'story_reply',
+      match_mode: 'contains',
+      keywords: '',
+      actions: [{ type: 'send_dm', order: 0, text: 'مرسی که جواب دادی {{username}} جان! 🌟' }]
+    }
   },
   {
-    value: 'new_follower',
-    label: 'فالوور جدید',
-    desc: 'کسی شما را فالو می‌کند → پیام خوشامد می‌گیرد (نیازمند موتور Session)'
+    icon: '🙌',
+    title: 'تشکر از منشن',
+    desc: 'هر کس تو را در استوری‌اش منشن کند، تشکر می‌گیرد',
+    draft: {
+      name: 'تشکر از منشن',
+      trigger_type: 'mention',
+      match_mode: 'contains',
+      keywords: '',
+      actions: [{ type: 'send_dm', order: 0, text: 'وای مرسی که منشنم کردی {{username}}! ❤️' }]
+    }
   },
   {
-    value: 'new_post',
-    label: 'پست جدید گذاشتم',
-    desc: 'پست جدید منتشر می‌شود → به فالوورها/فالووینگ اطلاع داده می‌شود (نیازمند موتور Session)'
+    icon: '👋',
+    title: 'خوشامد فالوور جدید',
+    desc: 'هر کس فالوات کند، پیام خوشامد می‌گیرد',
+    draft: {
+      name: 'خوشامد',
+      trigger_type: 'new_follower',
+      match_mode: 'contains',
+      keywords: '',
+      actions: [
+        {
+          type: 'send_dm',
+          order: 0,
+          text: '{سلام|درود} {{username}}! خیلی خوشحالم که دنبالم کردی. پست‌های دیگرم را هم ببین 🌸'
+        }
+      ]
+    }
+  },
+  {
+    icon: '📣',
+    title: 'خبر پست جدید',
+    desc: 'وقتی پست می‌گذاری، به فالوورهایت دایرکت می‌رود',
+    draft: {
+      name: 'خبر پست جدید',
+      trigger_type: 'new_post',
+      match_mode: 'contains',
+      keywords: 'followers',
+      actions: [{ type: 'send_dm', order: 0, text: '{سلام|درود}! پست جدید گذاشتم، خوشحال می‌شوم ببینی: {{post_link}}' }]
+    }
   }
 ]
 
@@ -36,7 +111,7 @@ const MATCH_MODES: { value: MatchMode; label: string }[] = [
   { value: 'contains', label: 'شامل کلمه باشد' },
   { value: 'exact', label: 'کاملاً برابر باشد' },
   { value: 'starts_with', label: 'با آن شروع شود' },
-  { value: 'regex', label: 'عبارت باقاعده (regex)' }
+  { value: 'regex', label: 'الگوی پیشرفته' }
 ]
 
 const AUDIENCES = [
@@ -230,6 +305,9 @@ export function AutomationsPage({ accountId }: { accountId: number | null }): JS
         )}
       </Card>
 
+      <AiReplyCard />
+      {accountId && <IceBreakersCard accountId={accountId} />}
+
       {draft && (
         <RuleEditor
           draft={draft}
@@ -256,6 +334,8 @@ function RuleEditor({
   onSaved: () => void
 }): JSX.Element {
   const [d, setD] = useState<Draft>(draft)
+  // قانون تازه اول با کارت‌های آماده شروع می‌شود، نه با یک فرم خالی
+  const [picking, setPicking] = useState(!draft.id)
   const [saving, setSaving] = useState(false)
   const [testText, setTestText] = useState('')
   const [testResult, setTestResult] = useState<{ matched: boolean; reason: string; preview: string[] } | null>(null)
@@ -320,13 +400,44 @@ function RuleEditor({
     if (r) setTestResult(r)
   }
 
+  if (picking) {
+    return (
+      <Modal open wide onClose={onClose} title="چی می‌خوای خودکار بشه؟" subtitle="یکی را انتخاب کن — بعدش متن را عوض می‌کنی">
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {TEMPLATES.map((t) => (
+            <button
+              key={t.title}
+              onClick={() => {
+                setD({ ...d, ...t.draft, actions: t.draft.actions?.map((a) => ({ ...a })) })
+                setPicking(false)
+              }}
+              className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 text-right transition-colors hover:border-fuchsia-400/40 hover:bg-fuchsia-500/[0.06]"
+            >
+              <p className="text-2xl">{t.icon}</p>
+              <p className="mt-1.5 text-sm font-semibold text-slate-100">{t.title}</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{t.desc}</p>
+            </button>
+          ))}
+          <button
+            onClick={() => setPicking(false)}
+            className="rounded-xl border border-dashed border-white/[0.12] p-4 text-right text-slate-400 hover:text-slate-200"
+          >
+            <p className="text-2xl">✏️</p>
+            <p className="mt-1.5 text-sm font-semibold">از صفر</p>
+            <p className="mt-1 text-[11px]">خودم همه‌چیز را تنظیم می‌کنم</p>
+          </button>
+        </div>
+      </Modal>
+    )
+  }
+
   return (
     <Modal
       open
       wide
       onClose={onClose}
       title={d.id ? 'ویرایش قانون' : 'قانون جدید'}
-      subtitle="تریگر تعیین می‌کند کِی اجرا شود، اکشن‌ها تعیین می‌کنند چه کاری انجام شود"
+      subtitle="متن پیام را به سلیقه‌ی خودت عوض کن و ذخیره کن"
       footer={
         <>
           <button className="btn-ghost" onClick={onClose}>
@@ -339,7 +450,7 @@ function RuleEditor({
       }
     >
       <div className="space-y-4">
-        <Field label="نام قانون" hint="فقط برای خودتان — در اینستاگرام دیده نمی‌شود">
+        <Field label="اسم" hint="فقط برای خودت — کسی نمی‌بیند">
           <input
             className="input"
             value={d.name ?? ''}
@@ -348,7 +459,7 @@ function RuleEditor({
           />
         </Field>
 
-        <Field label="تریگر (چه زمانی اجرا شود)">
+        <Field label="کِی اجرا شود؟">
           <Select
             value={(d.trigger_type ?? 'comment_keyword') as TriggerType}
             onChange={(v) => set('trigger_type', v)}
@@ -358,34 +469,27 @@ function RuleEditor({
         </Field>
 
         {(isNewFollower || isNewPost) && (
-          <Notice tone="warn" title="این تریگر به موتور Session نیاز دارد">
-            API رسمی اینستاگرام نه رویداد «فالوور جدید» دارد و نه اجازه‌ی دایرکت انبوه می‌دهد. برای این
-            قانون باید در تنظیمات، موتور Session را روشن و حساب را با نام کاربری و رمز وصل کنید.
+          <Notice tone="info" title="برای این یکی «ورود ساده» لازم است">
+            اگر حسابت را با «ورود ساده» یا «کد نشست» وصل کرده‌ای، کار می‌کند.
           </Notice>
         )}
 
-        {needsKeywords && (
-          <>
-            <Field label="حالت تطبیق">
-              <Select
-                value={(d.match_mode ?? 'number') as MatchMode}
-                onChange={(v) => set('match_mode', v)}
-                options={MATCH_MODES}
-              />
-            </Field>
-
-            <Field
-              label="کلیدواژه‌ها یا اعداد"
-              hint="با کاما جدا کنید. ارقام فارسی و عربی خودکار تبدیل می‌شوند — «۱» و «1» یکی حساب می‌شوند. «كد» با ك عربی هم با «کد» تطبیق می‌دهد."
-            >
-              <input
-                className="input"
-                value={d.keywords ?? ''}
-                onChange={(e) => set('keywords', e.target.value)}
-                placeholder="1, یک, قیمت"
-              />
-            </Field>
-          </>
+        {(needsKeywords || d.trigger_type === 'story_reply') && (
+          <Field
+            label={d.trigger_type === 'story_reply' ? 'کلمه (اختیاری)' : 'چه کلمه یا عددی؟'}
+            hint={
+              d.trigger_type === 'story_reply'
+                ? 'خالی بگذار تا به هر جوابی پیام بدهد'
+                : 'اگر چند تا است، با ویرگول جدا کن. «۱» و «1» یکی حساب می‌شوند.'
+            }
+          >
+            <input
+              className="input"
+              value={d.keywords ?? ''}
+              onChange={(e) => set('keywords', e.target.value)}
+              placeholder="1, قیمت, لینک"
+            />
+          </Field>
         )}
 
         {isNewPost && (
@@ -398,34 +502,19 @@ function RuleEditor({
           </Field>
         )}
 
-        {(d.trigger_type === 'comment_keyword' || d.trigger_type === 'comment_any') && (
-          <Field
-            label="محدود به پست‌های خاص (اختیاری)"
-            hint="شناسه‌ی پست‌ها با کاما. خالی بگذارید تا روی همه‌ی پست‌ها اعمال شود. شناسه‌ها را در صفحه‌ی آنالیتیکس می‌بینید."
-          >
-            <input
-              className="input"
-              value={d.media_scope ?? ''}
-              onChange={(e) => set('media_scope', e.target.value || null)}
-              placeholder="خالی = همه‌ی پست‌ها"
-            />
-          </Field>
-        )}
-
         {/* ───── اکشن‌ها ───── */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="label mb-0">اکشن‌ها (به ترتیب اجرا)</label>
+            <label className="label mb-0">چه پیامی برود؟</label>
             <div className="flex gap-1.5">
               <button className="btn-ghost btn-sm" onClick={() => addAction('send_dm')}>
                 + دایرکت
               </button>
-              <button className="btn-ghost btn-sm" onClick={() => addAction('reply_comment')}>
-                + پاسخ کامنت
-              </button>
-              <button className="btn-ghost btn-sm" onClick={() => addAction('wait')}>
-                + صبر
-              </button>
+              {(d.trigger_type === 'comment_keyword' || d.trigger_type === 'comment_any') && (
+                <button className="btn-ghost btn-sm" onClick={() => addAction('reply_comment')}>
+                  + جواب زیر کامنت
+                </button>
+              )}
             </div>
           </div>
 
@@ -442,10 +531,10 @@ function RuleEditor({
                   <span className="chip-info">
                     {i + 1}.{' '}
                     {a.type === 'send_dm'
-                      ? 'ارسال دایرکت'
+                      ? 'دایرکت'
                       : a.type === 'reply_comment'
-                        ? 'پاسخ عمومی به کامنت'
-                        : 'صبر کردن'}
+                        ? 'جواب زیر کامنت'
+                        : 'صبر'}
                   </span>
                   <button className="btn-danger btn-sm" onClick={() => removeAction(i)}>
                     حذف
@@ -475,12 +564,31 @@ function RuleEditor({
                       }
                     />
                     <p className="hint">
-                      متغیرها: <code className="text-fuchsia-300">{'{{username}}'}</code>{' '}
-                      <code className="text-fuchsia-300">{'{{name}}'}</code>{' '}
-                      <code className="text-fuchsia-300">{'{{post_link}}'}</code> — و برای تنوع متن:{' '}
-                      <code className="text-fuchsia-300">{'{سلام|درود}'}</code> یکی را تصادفی
-                      انتخاب می‌کند
+                      <code className="text-fuchsia-300">{'{{username}}'}</code> جای اسم طرف می‌نشیند.{' '}
+                      <code className="text-fuchsia-300">{'{سلام|درود}'}</code> هر بار یکی را انتخاب
+                      می‌کند تا پیام‌ها تکراری نباشند.
                     </p>
+                    {a.type === 'send_dm' && (
+                      <div className="mt-2 rounded-lg border border-white/[0.06] p-2.5">
+                        <Toggle
+                          checked={a.followGate !== undefined}
+                          onChange={(v) =>
+                            setAction(i, {
+                              followGate: v ? 'اول فالوم کن، بعد دوباره همون کلمه رو بفرست تا برات بفرستم 🙏' : undefined
+                            })
+                          }
+                          label="فقط به کسی که فالوم کرده"
+                          hint="اگر فالو نکرده باشد، اول این پیام را می‌گیرد؛ بعد از فالو دوباره امتحان کند"
+                        />
+                        {a.followGate !== undefined && (
+                          <textarea
+                            className="input mt-2 min-h-[60px] resize-y"
+                            value={a.followGate}
+                            onChange={(e) => setAction(i, { followGate: e.target.value })}
+                          />
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -488,12 +596,45 @@ function RuleEditor({
           </div>
         </div>
 
+        {/* همه‌چیزِ تخصصی اینجا، بسته — بیشتر کاربرها هیچ‌وقت لازمش ندارند */}
+        <details className="rounded-lg border border-white/[0.07] p-3">
+          <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-200">
+            تنظیمات بیشتر (اختیاری)
+          </summary>
+          <div className="mt-3 space-y-4">
+            {needsKeywords && (
+              <Field label="کلمه چطور مقایسه شود؟">
+                <Select
+                  value={(d.match_mode ?? 'contains') as MatchMode}
+                  onChange={(v) => set('match_mode', v)}
+                  options={MATCH_MODES}
+                />
+              </Field>
+            )}
+        {(d.trigger_type === 'comment_keyword' || d.trigger_type === 'comment_any') && (
+              <Field
+                label="محدود به پست‌های خاص (اختیاری)"
+                hint="شناسه‌ی پست‌ها با کاما. خالی بگذارید تا روی همه‌ی پست‌ها اعمال شود. شناسه‌ها را در صفحه‌ی آنالیتیکس می‌بینید."
+              >
+                <input
+                  className="input"
+                  value={d.media_scope ?? ''}
+                  onChange={(e) => set('media_scope', e.target.value || null)}
+                  placeholder="خالی = همه‌ی پست‌ها"
+                />
+              </Field>
+            )}
+    
+    
+            <button className="btn-ghost btn-sm" onClick={() => addAction('wait')}>
+              + صبر بین پیام‌ها
+            </button>
         {/* ───── تنظیمات رفتار ───── */}
         <div className="rounded-lg border border-white/[0.07] p-3">
           <Toggle
             checked={d.once_per_user !== false}
             onChange={(v) => set('once_per_user', v)}
-            label="هر کاربر فقط یک بار پاسخ بگیرد"
+            label="هر کس فقط یک بار جواب بگیرد"
             hint="اگر خاموش کنید، کاربری که چند بار کامنت بگذارد چند بار دایرکت می‌گیرد — که معمولاً آزاردهنده است"
           />
           <div className="mt-2 grid grid-cols-2 gap-3">
@@ -529,7 +670,7 @@ function RuleEditor({
         {/* ───── تستر ───── */}
         <div className="rounded-lg border border-sky-500/20 bg-sky-500/[0.04] p-3">
           <p className="mb-2 text-xs font-medium text-sky-200">
-            تست قانون — بدون ارسال هیچ پیامی
+            امتحان کن — هیچ پیامی واقعاً فرستاده نمی‌شود
           </p>
           <div className="flex gap-2">
             <input
@@ -567,7 +708,185 @@ function RuleEditor({
             </div>
           )}
         </div>
+          </div>
+        </details>
       </div>
     </Modal>
+  )
+}
+
+
+/**
+ * جواب هوشمند (ایده از InstaAuto): وقتی هیچ قانونی به یک دایرکت نخورد، به‌جای
+ * سکوت یک جواب کوتاه بر اساس توضیحی که خودت درباره‌ی کارت نوشته‌ای می‌رود.
+ */
+function AiReplyCard(): JSX.Element {
+  const [s, setS] = useState<AiSettingsView | null>(null)
+  const [info, setInfo] = useState('')
+  const [key, setKey] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [testText, setTestText] = useState('')
+  const [testOut, setTestOut] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void call('getAiSettings').then((v) => {
+      if (!v) return
+      setS(v)
+      setInfo(v.businessInfo)
+      setBaseUrl(v.baseUrl)
+    })
+  }, [])
+
+  const save = async (patch: Parameters<typeof call<'setAiSettings'>>[1]): Promise<void> => {
+    const v = await call('setAiSettings', patch)
+    if (v) {
+      setS(v)
+      toasts.push('success', 'ذخیره شد')
+    }
+  }
+
+  if (!s) return <></>
+
+  return (
+    <Card
+      title="🤖 جواب هوشمند"
+      subtitle="اگر کسی دایرکتی داد که هیچ قانونی برایش نیست، هوش مصنوعی از طرف تو جواب کوتاه می‌دهد"
+    >
+      <div className="space-y-4">
+        <Toggle
+          checked={s.enabled}
+          onChange={(v) => {
+            if (v && (!s.hasKey || !info.trim())) {
+              toasts.push('warn', 'اول توضیح کارت و کلید را وارد کن و ذخیره بزن')
+              return
+            }
+            void save({ enabled: v })
+          }}
+          label={s.enabled ? 'روشن است' : 'خاموش است'}
+        />
+
+        <Field label="درباره‌ی کارت بنویس" hint="چه می‌فروشی، قیمت‌ها، لینک‌ها، ساعت کاری. فقط از همین‌ها جواب می‌دهد و چیزی از خودش نمی‌سازد.">
+          <textarea
+            className="input min-h-[110px] resize-y"
+            value={info}
+            onChange={(e) => setInfo(e.target.value)}
+            placeholder="مثلا: فروشگاه لباس زنانه. ارسال به همه‌ی شهرها ۲ تا ۴ روز. سفارش از سایت: https://… پاسخگویی ۹ صبح تا ۹ شب."
+          />
+        </Field>
+
+        <Field
+          label="کلید"
+          hint={s.hasKey ? 'کلید ذخیره شده است. برای عوض کردن، کلید تازه را بنویس.' : 'کلید API انتروپیک (Claude) — از console.anthropic.com'}
+        >
+          <input
+            className="input"
+            dir="ltr"
+            type="password"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder={s.hasKey ? '••••••••' : 'sk-ant-…'}
+          />
+        </Field>
+
+        <details>
+          <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">
+            از ایران وصل نمی‌شود؟
+          </summary>
+          <Field label="آدرس واسط" hint="آدرس یک واسطِ سازگار با API انتروپیک. خالی = آدرس اصلی.">
+            <input className="input" dir="ltr" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://…" />
+          </Field>
+        </details>
+
+        <button
+          className="btn-primary"
+          onClick={() => {
+            void save({ businessInfo: info, baseUrl, ...(key.trim() ? { apiKey: key.trim() } : {}) }).then(() => setKey(''))
+          }}
+        >
+          ذخیره
+        </button>
+
+        <div className="rounded-lg border border-sky-500/20 bg-sky-500/[0.04] p-3">
+          <p className="mb-2 text-xs font-medium text-sky-200">امتحان کن — چیزی فرستاده نمی‌شود</p>
+          <div className="flex gap-2">
+            <input className="input" value={testText} onChange={(e) => setTestText(e.target.value)} placeholder="مثلا: سلام، ارسال به شیراز دارید؟" />
+            <button
+              className="btn-ghost shrink-0"
+              disabled={busy || !testText.trim()}
+              onClick={() => {
+                setBusy(true)
+                setTestOut(null)
+                void callRaw('testAiReply', { text: testText }).then((r) => {
+                  setBusy(false)
+                  if (r.ok) setTestOut((r.data as { reply: string | null }).reply ?? '(جوابی نساخت)')
+                  else toasts.push('error', r.error ?? 'امتحان ناموفق بود', r.hint)
+                })
+              }}
+            >
+              {busy ? '…' : 'امتحان'}
+            </button>
+          </div>
+          {testOut && (
+            <p className="mt-2 whitespace-pre-wrap rounded-lg bg-[#0b0f17] px-3 py-2 text-xs leading-relaxed text-slate-200">
+              {testOut}
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * سوال‌های آماده (Ice Breakers، ایده از InstaAuto) — دکمه‌هایی که کسی موقع
+ * باز کردن دایرکت می‌بیند. ضربه روی هر سوال یک دایرکت معمولی است، پس قوانین
+ * «کلمه در دایرکت» یا جواب هوشمند جوابش را می‌دهند.
+ */
+function IceBreakersCard({ accountId }: { accountId: number }): JSX.Element {
+  const [qs, setQs] = useState<string[]>(['', '', '', ''])
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void call('getIceBreakers', { accountId }).then((v) => {
+      if (v) setQs([...v, '', '', '', ''].slice(0, 4))
+    })
+  }, [accountId])
+
+  return (
+    <Card
+      title="❓ سوال‌های آماده‌ی دایرکت"
+      subtitle="وقتی کسی برای اولین بار دایرکتت را باز می‌کند، این سوال‌ها را به شکل دکمه می‌بیند"
+    >
+      <div className="space-y-2">
+        {qs.map((q, i) => (
+          <input
+            key={i}
+            className="input"
+            value={q}
+            maxLength={80}
+            onChange={(e) => setQs(qs.map((x, j) => (j === i ? e.target.value : x)))}
+            placeholder={['قیمت‌ها چنده؟', 'ارسال دارید؟', 'چطور سفارش بدم؟', 'ساعت کاری؟'][i]}
+          />
+        ))}
+        <p className="hint">
+          برای هر سوال یک قانون «کلمه در دایرکت» بساز، یا جواب هوشمند را روشن کن. فقط با اتصال «API رسمی» کار می‌کند.
+        </p>
+        <button
+          className="btn-primary"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true)
+            void callRaw('setIceBreakers', { accountId, questions: qs }).then((r) => {
+              setBusy(false)
+              if (r.ok) toasts.push('success', 'سوال‌ها در اینستاگرام ذخیره شد')
+              else toasts.push('error', r.error ?? 'ذخیره نشد', r.hint)
+            })
+          }}
+        >
+          {busy ? 'در حال ذخیره…' : 'ذخیره در اینستاگرام'}
+        </button>
+      </div>
+    </Card>
   )
 }

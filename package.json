@@ -1,6 +1,6 @@
 {
   "name": "ig-auto-suite",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "description": "اپ دسکتاپ مدیریت و اتوماسیون اینستاگرام",
   "main": "out/main/index.js",
   "author": "Ashkan",
@@ -20,6 +20,7 @@
     "test:sessionid": "esbuild scripts/test-sessionid.ts --bundle --platform=node --format=cjs --external:electron --outfile=.test-sid.cjs --log-level=error && node .test-sid.cjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "express": "^4.21.1",
     "node-sqlite3-wasm": "^0.8.30"
   },

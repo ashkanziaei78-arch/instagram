@@ -9,6 +9,7 @@ import { pollerScheduler } from '../core/pollers'
 import { PUSH_EVENTS } from '../shared/ipc'
 import { refreshExpiringTokens, registerIpc } from './ipc'
 import { secureStore } from './secure-store'
+import { setAiKeyProvider } from '../core/ai/reply'
 import { startWebhookFromSettings, webhookServer } from './webhook-server'
 
 let mainWindow: BrowserWindow | null = null
@@ -155,6 +156,8 @@ async function bootstrap(): Promise<void> {
 
   registerJobHandlers()
   jobQueue.start(5000)
+
+  setAiKeyProvider(() => secureStore().getAiKey())
 
   // نسخه‌های قبلی یک حساب را که با دو روش وصل می‌شد دو ردیف جدا ثبت می‌کردند
   // (هر روش شناسه‌ی متفاوتی برمی‌گرداند). اینجا یکی‌شان می‌کنیم: ردیفی که API

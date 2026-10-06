@@ -13,6 +13,7 @@ import { engines } from '../engine'
 import { jobQueue } from '../queue/job-queue'
 import { findMatchingRule } from '../rules/matcher'
 import { enqueueRuleActions, type TriggerContext } from '../rules/runner'
+import { aiReady, generateReply } from '../ai/reply'
 import { buildMessage, humanDelayMs } from '../text'
 import type { BroadcastTargetFilter } from '../../shared/types'
 
@@ -132,10 +133,32 @@ export async function handleIncomingDm(d: IncomingDm): Promise<{ handled: boolea
   })
 
   const rules = rulesRepo.active(d.accountId, 'dm_keyword')
-  if (rules.length === 0) return { handled: false, reason: 'قانون فعالی برای دایرکت وجود ندارد' }
-
-  const match = findMatchingRule(rules, d.text)
-  if (!match) return { handled: false, reason: 'هیچ قانونی تطبیق نیافت' }
+  const match = rules.length > 0 ? findMatchingRule(rules, d.text) : null
+  if (!match) {
+    // هیچ قانونی نخورد: اگر جواب هوشمند روشن است، به‌جای سکوت او جواب می‌دهد
+    if (aiReady()) {
+      const id = jobsRepo.enqueue({
+        account_id: d.accountId,
+        kind: 'ai.reply',
+        run_at: Date.now() + humanDelayMs(6, 20),
+        dedupe_key: 'ai:' + d.accountId + ':' + (d.messageId ?? d.fromUserId + ':' + d.text.slice(0, 80)),
+        payload: {
+          recipientIgId: d.fromUserId,
+          username: d.fromUsername,
+          text: d.text,
+          messageId: d.messageId,
+          idSource: d.idSource
+        }
+      })
+      return id !== null
+        ? { handled: true, reason: 'قانونی نخورد — جواب هوشمند در صف رفت' }
+        : { handled: false, reason: 'جواب هوشمند قبلا برای این پیام ساخته شده' }
+    }
+    return {
+      handled: false,
+      reason: rules.length === 0 ? 'قانون فعالی برای دایرکت وجود ندارد' : 'هیچ قانونی تطبیق نیافت'
+    }
+  }
 
   const queued = enqueueRuleActions(match.rule, {
     accountId: d.accountId,
@@ -146,6 +169,42 @@ export async function handleIncomingDm(d: IncomingDm): Promise<{ handled: boolea
   })
 
   return { handled: queued > 0, reason: 'قانون «' + match.rule.name + '» فعال شد' }
+}
+
+/* ══════════════════════════ ۲.۵ جواب به استوری و منشن (ایده از InstaAuto) ══════════════════════════ */
+
+/**
+ * کسی به استوری جواب داده یا شما را در استوری‌اش منشن کرده.
+ *
+ * این دو رویداد ارزشمندترین مخاطب‌اند — طرف خودش شروع کرده — و دایرکت به آن‌ها
+ * در پنجره‌ی ۲۴ ساعته است، یعنی حتی با API رسمی هم مجاز. کلیدواژه برای جواب
+ * استوری اختیاری است: قانونِ بدون کلیدواژه به هر جوابی واکنش می‌دهد.
+ */
+export async function handleStoryEvent(d: IncomingDm & { kind: 'story_reply' | 'story_mention' }): Promise<{
+  handled: boolean
+  reason: string
+}> {
+  contactsRepo.markInbound(d.accountId, d.fromUserId)
+  if (d.fromUsername) contactsRepo.upsert(d.accountId, { ig_user_id: d.fromUserId, username: d.fromUsername })
+
+  const trigger = d.kind === 'story_reply' ? 'story_reply' : 'mention'
+  const rules = rulesRepo.active(d.accountId, trigger)
+  const label = d.kind === 'story_reply' ? 'جواب استوری' : 'منشن در استوری'
+  if (rules.length === 0) return { handled: false, reason: label + ' — قانون فعالی برایش نیست' }
+
+  const withKw = rules.filter((r) => r.keywords.trim())
+  const match = d.text ? findMatchingRule(withKw, d.text) : null
+  const rule = match?.rule ?? rules.find((r) => !r.keywords.trim())
+  if (!rule) return { handled: false, reason: label + ' — هیچ قانونی تطبیق نیافت' }
+
+  const queued = enqueueRuleActions(rule, {
+    accountId: d.accountId,
+    userIgId: d.fromUserId,
+    username: d.fromUsername,
+    rawText: d.text,
+    idSource: d.idSource
+  })
+  return { handled: queued > 0, reason: label + ' — قانون «' + rule.name + '» فعال شد' }
 }
 
 /* ══════════════════════════ ۳. خوشامد به فالوور جدید ══════════════════════════ */
@@ -340,6 +399,31 @@ export function onNewPostDetected(accountId: number, mediaId: string): number {
 /* ══════════════════════════ ثبت هندلرهای صف ══════════════════════════ */
 
 export function registerJobHandlers(): void {
+  /* ── جواب هوشمند: متن را می‌سازد و به صف ارسال عادی می‌دهد ── */
+  // ارسال از مسیر dm.send می‌رود تا همان سقف روزانه، تأخیر و گزارش را بگیرد
+  jobQueue.register('ai.reply', {
+    async run({ job, payload }) {
+      const text = String(payload.text ?? '')
+      const reply = await generateReply(text, payload.username ? String(payload.username) : undefined)
+      if (!reply) {
+        logRepo.add({ account_id: job.account_id, level: 'info', category: 'ai', message: 'جواب هوشمند برای این پیام جوابی نساخت' })
+        return
+      }
+      jobsRepo.enqueue({
+        account_id: job.account_id,
+        kind: 'dm.send',
+        run_at: Date.now() + humanDelayMs(2, 6),
+        dedupe_key: 'ai-send:' + job.id,
+        payload: {
+          recipientIgId: payload.recipientIgId,
+          username: payload.username,
+          text: reply,
+          idSource: payload.idSource
+        }
+      })
+    }
+  })
+
   /* ── ارسال دایرکت ── */
   jobQueue.register('dm.send', {
     action: 'dm',
@@ -354,11 +438,27 @@ export function registerJobHandlers(): void {
 
       if (!recipientIgId || !text) throw new Error('گیرنده یا متن پیام خالی است')
 
+      const idSource = payload.idSource === 'web' || payload.idSource === 'graph' ? payload.idSource : undefined
+      const followGate = payload.followGate ? String(payload.followGate) : ''
+      if (followGate && !(await engines().isFollower(job.account_id, recipientIgId, idSource))) {
+        await engines().sendDmSmart(job.account_id, recipientIgId, followGate, { commentId, idSource })
+        // کلید تکرار آزاد می‌شود تا بعد از فالو، همان کلیدواژه این بار لینک را بگیرد
+        jobsRepo.releaseDedupe(job.id)
+        contactsRepo.markOutbound(job.account_id, recipientIgId)
+        logRepo.add({
+          account_id: job.account_id,
+          level: 'info',
+          category: 'dm',
+          message: '@' + (payload.username ?? recipientIgId) + ' هنوز فالو نکرده — پیام «اول فالو کن» رفت'
+        })
+        return
+      }
+
       try {
         const res = await engines().sendDmSmart(job.account_id, recipientIgId, text, {
           commentId,
           buttons,
-          idSource: payload.idSource === 'web' || payload.idSource === 'graph' ? payload.idSource : undefined
+          idSource
         })
 
         contactsRepo.markOutbound(job.account_id, recipientIgId)

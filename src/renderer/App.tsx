@@ -23,17 +23,30 @@ type PageKey =
   | 'logs'
   | 'settings'
 
-const NAV: { key: PageKey; label: string; icon: string; group: 1 | 2 | 3 }[] = [
-  { key: 'dashboard', label: 'داشبورد', icon: '◈', group: 1 },
-  { key: 'automations', label: 'اتوماسیون‌ها', icon: '⚡', group: 1 },
-  { key: 'inbox', label: 'صندوق دایرکت', icon: '✉', group: 1 },
-  { key: 'broadcasts', label: 'ارسال گروهی', icon: '✈', group: 1 },
-  { key: 'analytics', label: 'آنالیتیکس', icon: '▤', group: 2 },
-  { key: 'contacts', label: 'مخاطبان', icon: '☷', group: 2 },
-  { key: 'accounts', label: 'حساب‌ها', icon: '◎', group: 3 },
-  { key: 'logs', label: 'فعالیت و صف', icon: '≡', group: 3 },
-  { key: 'settings', label: 'تنظیمات', icon: '⚙', group: 3 }
+/**
+ * advanced: فقط در «حالت پیشرفته» دیده می‌شود. بیشتر کاربرها فقط می‌خواهند
+ * حساب را وصل کنند و یک قانون بسازند — بقیه‌ی صفحه‌ها برایشان شلوغی است.
+ */
+const NAV: { key: PageKey; label: string; icon: string; group: 1 | 2 | 3; advanced?: boolean }[] = [
+  { key: 'dashboard', label: 'خانه', icon: '◈', group: 1 },
+  { key: 'automations', label: 'جواب خودکار', icon: '⚡', group: 1 },
+  { key: 'inbox', label: 'دایرکت‌ها', icon: '✉', group: 1 },
+  { key: 'broadcasts', label: 'پیام گروهی', icon: '✈', group: 1 },
+  { key: 'analytics', label: 'آمار پست‌ها', icon: '▤', group: 2, advanced: true },
+  { key: 'contacts', label: 'مخاطبان', icon: '☷', group: 2, advanced: true },
+  { key: 'accounts', label: 'حساب من', icon: '◎', group: 3 },
+  { key: 'logs', label: 'گزارش کارها', icon: '≡', group: 3, advanced: true },
+  { key: 'settings', label: 'تنظیمات', icon: '⚙', group: 3, advanced: true }
 ]
+
+/** ترجیح هر کاربر — اگر حافظه‌ی مرورگر در دسترس نبود، حالت ساده */
+function loadAdvanced(): boolean {
+  try {
+    return localStorage.getItem('advancedMode') === '1'
+  } catch {
+    return false
+  }
+}
 
 /** چند تا از سه راه اتصال برای این حساب برقرار است */
 const linkCount = (a: AccountWithLinks): number =>
@@ -45,6 +58,17 @@ export default function App(): JSX.Element {
   const [activeId, setActiveId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [killSwitch, setKillSwitch] = useState(false)
+  const [advanced, setAdvanced] = useState(loadAdvanced)
+  const toggleAdvanced = (): void => {
+    const next = !advanced
+    setAdvanced(next)
+    try {
+      localStorage.setItem('advancedMode', next ? '1' : '0')
+    } catch {
+      /* فقط همین جلسه */
+    }
+    if (!next && NAV.find((n) => n.key === page)?.advanced) setPage('dashboard')
+  }
 
   const loadAccounts = useCallback(async () => {
     const list = await call('listAccounts')
@@ -112,7 +136,7 @@ export default function App(): JSX.Element {
             IG
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-100">IG Auto Suite</p>
+            <p className="truncate text-sm font-semibold text-slate-100">دایرکت خودکار</p>
             <p className="text-[10px] text-slate-500">
               اتوماسیون اینستاگرام · نسخه‌ی {__APP_VERSION__}
             </p>
@@ -130,7 +154,7 @@ export default function App(): JSX.Element {
             >
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  @{a.username} ({linkCount(a)}/3 اتصال)
+                  @{a.username}
                 </option>
               ))}
             </select>
@@ -145,7 +169,7 @@ export default function App(): JSX.Element {
           {[1, 2, 3].map((g) => (
             <div key={g} className="mb-1">
               {g > 1 && <div className="my-2 border-t border-white/[0.06]" />}
-              {NAV.filter((n) => n.group === g).map((n) => (
+              {NAV.filter((n) => n.group === g && (advanced || !n.advanced)).map((n) => (
                 <button
                   key={n.key}
                   onClick={() => setPage(n.key)}
@@ -164,18 +188,27 @@ export default function App(): JSX.Element {
           ))}
         </nav>
 
+        <div className="px-3 pb-2">
+          <button
+            onClick={toggleAdvanced}
+            className="w-full rounded-lg px-3 py-1.5 text-right text-[11px] text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"
+          >
+            {advanced ? '◂ حالت ساده' : '▸ حالت پیشرفته'}
+          </button>
+        </div>
+
         {/* کلید قطع اضطراری — همیشه در دید */}
         <div className="border-t border-white/[0.06] p-3">
           <button
             onClick={() => void toggleKill()}
             className={killSwitch ? 'btn-primary w-full' : 'btn-danger w-full'}
           >
-            {killSwitch ? '▶ فعال‌سازی مجدد' : '■ توقف اضطراری'}
+            {killSwitch ? '▶ دوباره روشن کن' : '■ همه را متوقف کن'}
           </button>
           <p className="mt-2 text-center text-[10px] leading-relaxed text-slate-500">
             {killSwitch
-              ? 'همه‌ی اتوماسیون‌ها متوقف است'
-              : 'همه‌ی ارسال‌ها را فوری متوقف می‌کند'}
+              ? 'هیچ پیامی فرستاده نمی‌شود'
+              : 'اگر چیزی اشتباه شد، این را بزن'}
           </p>
         </div>
       </aside>
@@ -192,7 +225,7 @@ export default function App(): JSX.Element {
               // شمارش اتصال‌ها، نه نام یک موتور: یک حساب می‌تواند چند اتصال
               // داشته باشد و نمایش فقط یکی، بقیه را نامرئی می‌کرد.
               <span className={linkCount(account) === 3 ? 'chip-ok' : 'chip-warn'}>
-                {linkCount(account)} از ۳ اتصال · @{account.username}
+                @{account.username} · {linkCount(account) === 3 ? 'کامل وصل است' : linkCount(account) + ' از ۳ اتصال'}
               </span>
             ) : (
               !loading && <span className="chip-warn">هیچ حسابی وصل نیست</span>

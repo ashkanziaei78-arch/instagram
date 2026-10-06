@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import type { DashboardStats } from '../../shared/ipc'
 import { Card, EmptyState, Notice, Spinner, StatTile } from '../components/ui'
+import type { PollerHealth } from '../../shared/ipc'
 import { call, fmtDuration, fmtFull, fmtNum, fmtRelative } from '../lib/api'
 
 export function DashboardPage({
@@ -91,6 +92,8 @@ export function DashboardPage({
           الان در ساعات سکوت هستیم — کارها در صف می‌مانند و صبح ارسال می‌شوند.
         </Notice>
       )}
+
+      <HealthCard />
 
       {/* ───── آمار کلی ───── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -281,5 +284,43 @@ export function DashboardPage({
         </div>
       </Card>
     </div>
+  )
+}
+
+/**
+ * «همه‌چیز کار می‌کند؟» با یک نگاه. هر نظرسنج آخرین نتیجه‌اش را گزارش می‌کند؛
+ * قبلا خطاها فقط در صفحه‌ی گزارش‌ها بود که در حالت ساده دیده نمی‌شود.
+ */
+function HealthCard(): JSX.Element {
+  const [items, setItems] = useState<PollerHealth[] | null>(null)
+  useEffect(() => {
+    const load = (): void => void call('getPollerHealth').then((v) => v && setItems(v))
+    load()
+    const t = setInterval(load, 15_000)
+    return () => clearInterval(t)
+  }, [])
+
+  if (!items || items.length === 0) {
+    return (
+      <Notice tone="info" title="در حال راه‌اندازی…">
+        چند ثانیه بعد از باز شدن اپ، اولین بررسی‌ها انجام می‌شود.
+      </Notice>
+    )
+  }
+  const bad = items.filter((i) => !i.ok)
+  return bad.length === 0 ? (
+    <Notice tone="success" title="✓ همه‌چیز کار می‌کند">
+      دایرکت‌ها، کامنت‌ها و فالوورها مرتب بررسی می‌شوند.
+    </Notice>
+  ) : (
+    <Notice tone="danger" title="یک جای کار مشکل دارد">
+      <ul className="space-y-1">
+        {bad.map((b) => (
+          <li key={b.label}>
+            <strong>{b.label}:</strong> {b.error ?? 'ناموفق'}
+          </li>
+        ))}
+      </ul>
+    </Notice>
   )
 }

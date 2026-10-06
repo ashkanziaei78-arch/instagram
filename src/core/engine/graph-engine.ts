@@ -321,19 +321,17 @@ export class GraphEngine implements IEngine {
       return {
         attachment: {
           type: 'template',
+          // قالب button نه generic: generic متن را در عنوان ۸۰ حرفی و زیرعنوان
+          // می‌چپاند و بقیه‌ی پیام بی‌صدا حذف می‌شد. button تا ۶۴۰ حرف متن
+          // می‌گیرد و در پوشه‌ی Requests هم دیده می‌شود (الگوی chatmany).
           payload: {
-            template_type: 'generic',
-            elements: [
-              {
-                title: text.slice(0, 80),
-                subtitle: text.length > 80 ? text.slice(80, 160) : undefined,
-                buttons: opts.buttons.slice(0, 3).map((b) => ({
-                  type: 'web_url',
-                  url: b.url,
-                  title: b.title.slice(0, 20)
-                }))
-              }
-            ]
+            template_type: 'button',
+            text: text.slice(0, 640),
+            buttons: opts.buttons.slice(0, 3).map((b) => ({
+              type: 'web_url',
+              url: b.url,
+              title: b.title.slice(0, 20)
+            }))
           }
         }
       }
@@ -424,6 +422,51 @@ export class GraphEngine implements IEngine {
       })
     }
     return out
+  }
+
+  /**
+   * «سوال‌های آماده» (Ice Breakers) — وقتی کسی برای اولین بار دایرکت را باز
+   * می‌کند، این سوال‌ها را به‌صورت دکمه می‌بیند. ضربه روی هر کدام همان متن را
+   * به‌عنوان دایرکت می‌فرستد، پس قوانین «کلمه در دایرکت» و جواب هوشمند خودکار
+   * جوابش را می‌دهند. حداکثر ۴ سوال. فقط از راه API رسمی.
+   */
+  async setIceBreakers(accountId: number, questions: string[]): Promise<void> {
+    const qs = questions.map((q) => q.trim()).filter(Boolean).slice(0, 4)
+    if (qs.length === 0) {
+      await this.request(accountId, '/me/messenger_profile', {
+        method: 'DELETE',
+        query: { platform: 'instagram' },
+        body: { fields: ['ice_breakers'] },
+        context: 'حذف سوال‌های آماده'
+      })
+      return
+    }
+    await this.request(accountId, '/me/messenger_profile', {
+      method: 'POST',
+      query: { platform: 'instagram' },
+      body: {
+        ice_breakers: [
+          {
+            call_to_actions: qs.map((q, i) => ({ question: q.slice(0, 80), payload: 'IB_' + i })),
+            locale: 'default'
+          }
+        ]
+      },
+      context: 'ذخیره‌ی سوال‌های آماده'
+    })
+  }
+
+  /**
+   * فیلد is_user_follow_business از User Profile API — همان چیزی که openinstadm
+   * برای «اول فالو کن» استفاده می‌کند. فقط برای کسی کار می‌کند که با حساب
+   * گفت‌وگو دارد (پیام داده یا جواب خصوصی گرفته).
+   */
+  async isFollower(accountId: number, igsid: string): Promise<boolean> {
+    const d = await this.request<{ is_user_follow_business?: boolean }>(accountId, '/' + igsid, {
+      query: { fields: 'is_user_follow_business' },
+      context: 'بررسی فالو'
+    })
+    return d.is_user_follow_business === true
   }
 
   async listIncomingDms(accountId: number, sinceMs: number): Promise<IgDm[]> {

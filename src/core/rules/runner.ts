@@ -70,7 +70,8 @@ export function enqueueRuleActions(rule: Rule, ctx: TriggerContext): number {
             // حضور commentId باعث می‌شود از مسیر private reply برود که
             // نیازی به پنجره‌ی ۲۴ ساعته ندارد
             commentId: ctx.commentId,
-            idSource: ctx.idSource
+            idSource: ctx.idSource,
+            followGate: action.followGate?.trim() ? buildMessage(action.followGate, vars) : undefined
           }
         })
         if (id !== null) queued++

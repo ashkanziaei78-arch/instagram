@@ -12,6 +12,7 @@ import {
   enqueueWelcomeForNewFollowers,
   handleIncomingComment,
   handleIncomingDm,
+  handleStoryEvent,
   onNewPostDetected
 } from '../automations'
 
@@ -387,14 +388,15 @@ export async function pollInbox(accountId: number): Promise<InboxPollResult> {
       // یک پیام خراب نباید بقیه را متوقف کند
       let r: { handled: boolean; reason: string }
       try {
-        r = await handleIncomingDm({
+        const ev = {
           accountId,
           fromUserId: dm.from_user_id,
           fromUsername: dm.from_username,
           text: dm.text,
           messageId: dm.message_id,
           idSource: source
-        })
+        }
+        r = dm.kind === 'text' ? await handleIncomingDm(ev) : await handleStoryEvent({ ...ev, kind: dm.kind })
       } catch (err) {
         r = { handled: false, reason: 'خطا: ' + (err as Error).message }
       }
@@ -404,7 +406,9 @@ export async function pollInbox(accountId: number): Promise<InboxPollResult> {
         level: r.handled ? 'success' : 'info',
         category: 'dm',
         message:
-          'دایرکت از @' + (dm.from_username ?? dm.from_user_id) + ': «' + dm.text.slice(0, 60) + '» → ' + r.reason
+          (dm.kind === 'text' ? 'دایرکت' : dm.kind === 'story_reply' ? 'جواب استوری' : 'منشن استوری') +
+          ' از @' + (dm.from_username ?? dm.from_user_id) + (dm.text ? ': «' + dm.text.slice(0, 60) + '»' : '') +
+          ' → ' + r.reason
       })
     }
   } finally {
@@ -443,6 +447,16 @@ const DEFAULT_INTERVALS: PollerIntervals = {
   followersMs: 60 * 60 * 1000 // هر ساعت — گران‌ترین عملیات است
 }
 
+/**
+ * آخرین نتیجه‌ی هر نظرسنج — ایده از chatmany. بدون این، یک نظرسنج می‌توانست
+ * ساعت‌ها بی‌صدا شکست بخورد و تنها نشانه‌اش «اپ کار نمی‌کند» بود.
+ */
+const health = new Map<string, { at: number; ok: boolean; error?: string }>()
+
+export function pollerHealth(): { label: string; at: number; ok: boolean; error?: string }[] {
+  return [...health.entries()].map(([label, h]) => ({ label, ...h }))
+}
+
 export class PollerScheduler {
   private timers: NodeJS.Timeout[] = []
   private running = false
@@ -460,8 +474,11 @@ export class PollerScheduler {
       for (const acc of accountsRepo.all()) {
         if (acc.status !== 'active') continue
         try {
-          await fn(acc.id)
+          const r = (await fn(acc.id)) as { ok?: boolean; message?: string } | undefined
+          // نتیجه‌ی ok:false هم شکست است، حتی اگر استثنایی پرتاب نشده باشد
+          health.set(label, r && r.ok === false ? { at: Date.now(), ok: false, error: r.message } : { at: Date.now(), ok: true })
         } catch (e) {
+          health.set(label, { at: Date.now(), ok: false, error: (e as Error).message })
           logRepo.add({
             account_id: acc.id,
             level: 'warn',

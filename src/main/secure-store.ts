@@ -12,6 +12,8 @@ interface VaultShape {
   webSessions: Record<string, string>
   /** تنظیمات اپ متا */
   metaApp: { appId?: string; appSecret?: string; redirectUri?: string; webhookVerifyToken?: string }
+  /** کلید جواب هوشمند — مثل بقیه‌ی اعتبارنامه‌ها رمزنگاری‌شده، نه در دیتابیس */
+  aiKey?: string
 }
 
 const EMPTY: VaultShape = { tokens: {}, sessions: {}, webSessions: {}, metaApp: {} }
@@ -178,6 +180,19 @@ class SecureStore {
       delete v.webSessions[this.webKey(from, o)]
     }
     delete v.webSessions[f]
+    this.write()
+  }
+
+  /* ─────────── کلید جواب هوشمند ─────────── */
+
+  getAiKey(): string | null {
+    return this.read().aiKey || null
+  }
+
+  setAiKey(key: string | null): void {
+    const v = this.read()
+    if (key) v.aiKey = key
+    else delete v.aiKey
     this.write()
   }
 

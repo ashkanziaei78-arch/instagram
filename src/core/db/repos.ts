@@ -725,6 +725,10 @@ export const countersRepo = {
 /* ============================ صف کار ============================ */
 
 export const jobsRepo = {
+  /** کلید تکرار را آزاد می‌کند تا همین تریگر برای همین نفر دوباره ممکن باشد */
+  releaseDedupe(id: number): void {
+    getDb().prepare('UPDATE jobs SET dedupe_key=NULL WHERE id=?').run(id)
+  },
   enqueue(j: {
     account_id: number
     kind: string

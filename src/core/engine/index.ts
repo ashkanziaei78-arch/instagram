@@ -153,6 +153,29 @@ export class EngineManager {
     return { via: engine.kind, method: 'dm' }
   }
 
+  /**
+   * آیا این نفر ما را فالو می‌کند؟ اول بررسی زنده از همان راهی که شناسه‌اش
+   * آمده، و اگر نشد لیست فالوورهای همگام‌شده (که تا یک ساعت کهنه است — پس کسی
+   * که همین الان فالو کرده را ممکن است نبیند؛ بررسی زنده برای همین اول است).
+   */
+  async isFollower(accountId: number, userId: string, idSource?: 'web' | 'graph'): Promise<boolean> {
+    const tries: (() => Promise<boolean>)[] = []
+    if (idSource !== 'graph' && this.web.isConnected(accountId)) {
+      tries.push(() => this.web.isFollower(accountId, userId))
+    }
+    if (idSource !== 'web' && this.graph.isConnected(accountId)) {
+      tries.push(() => this.graph.isFollower(accountId, userId))
+    }
+    for (const t of tries) {
+      try {
+        return await t()
+      } catch {
+        /* راه بعدی */
+      }
+    }
+    return contactsRepo.get(accountId, userId)?.is_follower === 1
+  }
+
   /** وضعیت موتورها برای نمایش در UI */
   status(accountId: number): EngineStatus[] {
     const graphConnected = this.graph.isConnected(accountId)

@@ -6,7 +6,9 @@ import {
   UnsupportedCapabilityError,
   type IEngine,
   type IgComment,
+  type IgConversation,
   type IgDm,
+  incomingFrom,
   type IgInsights,
   type IgMedia,
   type IgProfile,
@@ -383,30 +385,49 @@ export class GraphEngine implements IEngine {
   }
 
   /**
-   * دایرکت‌های ورودی از مسیر /me/conversations — جایگزین وبهوک وقتی خاموش است.
-   * شناسه‌ی فرستنده‌ها IGSID است، همان چیزی که sendDm همین موتور لازم دارد.
+   * گفت‌وگوها از /{ig-user-id}/conversations — جایگزین وبهوک وقتی خاموش است.
+   * شناسه‌ها IGSID اند، همان چیزی که sendDm همین موتور لازم دارد.
+   *
+   * ⚠️ تا وقتی اپ متا در حالت Development است، این مسیر لیست *خالی* برمی‌گرداند
+   * بدون هیچ خطایی. صفحه‌ی صندوق این را به کاربر می‌گوید.
    */
-  async listIncomingDms(accountId: number, sinceMs: number): Promise<IgDm[]> {
+  async listConversations(accountId: number): Promise<IgConversation[]> {
     const me = this.igUserId(accountId)
     type Msg = { id: string; created_time?: string; message?: string; from?: { id?: string; username?: string } }
-    const d = await this.request<{ data?: { messages?: { data?: Msg[] } }[] }>(accountId, '/me/conversations', {
+    type Conv = { participants?: { data?: { id?: string; username?: string }[] }; messages?: { data?: Msg[] } }
+    const d = await this.request<{ data?: Conv[] }>(accountId, '/' + me + '/conversations', {
       query: {
         platform: 'instagram',
         limit: '20',
-        fields: 'messages.limit(10){id,created_time,message,from}'
+        fields: 'participants,messages.limit(10){id,created_time,message,from}'
       },
       context: 'خواندن دایرکت‌ها'
     })
-    const out: IgDm[] = []
-    for (const conv of d.data ?? []) {
-      for (const m of conv.messages?.data ?? []) {
-        const from = m.from?.id ?? ''
-        const ts = m.created_time ? Date.parse(m.created_time) : 0
-        if (!from || from === me || !m.message || ts <= sinceMs) continue
-        out.push({ message_id: m.id, from_user_id: from, from_username: m.from?.username, text: m.message, timestamp: ts })
-      }
+    const out: IgConversation[] = []
+    for (const c of d.data ?? []) {
+      const msgs = c.messages?.data ?? []
+      const peer =
+        (c.participants?.data ?? []).find((p) => p.id && p.id !== me) ??
+        msgs.find((m) => m.from?.id && m.from.id !== me)?.from
+      if (!peer?.id) continue
+      out.push({
+        peer_id: peer.id,
+        peer_username: peer.username,
+        messages: msgs
+          .map((m) => ({
+            id: m.id,
+            from_me: m.from?.id === me,
+            text: m.message ?? '',
+            timestamp: m.created_time ? Date.parse(m.created_time) : 0
+          }))
+          .sort((a, b) => a.timestamp - b.timestamp)
+      })
     }
-    return out.sort((a, b) => a.timestamp - b.timestamp)
+    return out
+  }
+
+  async listIncomingDms(accountId: number, sinceMs: number): Promise<IgDm[]> {
+    return incomingFrom(await this.listConversations(accountId), sinceMs)
   }
 
   /* ─────────────────────────── فالوورها: پشتیبانی نمی‌شود ─────────────────────────── */

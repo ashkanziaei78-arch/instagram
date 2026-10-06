@@ -9,7 +9,9 @@ import {
   type IgInsights,
   type IgMedia,
   type IgProfile,
+  type IgConversation,
   type IgDm,
+  incomingFrom,
   type IgUser,
   type SendDmOptions
 } from './types'
@@ -774,34 +776,43 @@ export class WebEngine implements IEngine {
     throw last
   }
 
-  async listIncomingDms(accountId: number, sinceMs: number): Promise<IgDm[]> {
+  async listConversations(accountId: number): Promise<IgConversation[]> {
     const me = this.pk(accountId)
-    const out: IgDm[] = []
-
     type Thread = {
       users?: { pk?: string | number; username?: string }[]
       items?: { item_id?: string; user_id?: string | number; timestamp?: string | number; item_type?: string; text?: string }[]
     }
-
-    for (const path of ['/api/v1/direct_v2/inbox/', '/api/v1/direct_v2/pending_inbox/']) {
+    const out: IgConversation[] = []
+    for (const [path, pending] of [
+      ['/api/v1/direct_v2/inbox/', false],
+      ['/api/v1/direct_v2/pending_inbox/', true]
+    ] as const) {
       const d = await this.inboxRequest<{ inbox?: { threads?: Thread[] } }>(accountId, path)
       for (const t of d.inbox?.threads ?? []) {
-        const names = new Map((t.users ?? []).map((u) => [String(u.pk), u.username]))
-        for (const it of t.items ?? []) {
-          const from = String(it.user_id ?? '')
-          const ts = Math.floor(Number(it.timestamp ?? 0) / 1000)
-          if (!from || from === me || it.item_type !== 'text' || !it.text || ts <= sinceMs) continue
-          out.push({
-            message_id: String(it.item_id ?? from + ':' + ts),
-            from_user_id: from,
-            from_username: names.get(from),
-            text: it.text,
-            timestamp: ts
-          })
-        }
+        const peer = (t.users ?? []).find((u) => String(u.pk) !== me) ?? t.users?.[0]
+        if (!peer) continue
+        out.push({
+          peer_id: String(peer.pk),
+          peer_username: peer.username,
+          pending,
+          messages: (t.items ?? [])
+            .filter((it) => it.item_type === 'text' && it.text)
+            .map((it) => ({
+              id: String(it.item_id ?? ''),
+              from_me: String(it.user_id ?? '') === me,
+              text: it.text ?? '',
+              // این API میکروثانیه می‌دهد، نه میلی‌ثانیه
+              timestamp: Math.floor(Number(it.timestamp ?? 0) / 1000)
+            }))
+            .sort((a, b) => a.timestamp - b.timestamp)
+        })
       }
     }
-    return out.sort((a, b) => a.timestamp - b.timestamp)
+    return out
+  }
+
+  async listIncomingDms(accountId: number, sinceMs: number): Promise<IgDm[]> {
+    return incomingFrom(await this.listConversations(accountId), sinceMs)
   }
 
   /* ─────────────────────────── فالوورها ─────────────────────────── */

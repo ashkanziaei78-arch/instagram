@@ -51,6 +51,15 @@ export interface IgDm {
   timestamp: number
 }
 
+/** یک گفت‌وگوی دایرکت با آخرین پیام‌هایش — برای صفحه‌ی صندوق و نظرسنج */
+export interface IgConversation {
+  peer_id: string
+  peer_username?: string
+  /** از Requests آمده (کسی که شما را فالو نمی‌کند) */
+  pending?: boolean
+  messages: { id: string; from_me: boolean; text: string; timestamp: number }[]
+}
+
 export interface IgProfile {
   ig_user_id: string
   username: string
@@ -98,6 +107,28 @@ export interface IEngine {
    * این، قانون «کلیدواژه در دایرکت» هرگز فعال نمی‌شد.
    */
   listIncomingDms?(accountId: number, sinceMs: number): Promise<IgDm[]>
+  listConversations?(accountId: number): Promise<IgConversation[]>
+}
+
+/**
+ * پیام‌های ورودی گفت‌وگوها، قدیمی به جدید. هر دو موتور از همین استفاده می‌کنند
+ * تا قاعده‌ی «پیام خودم نه، فقط متنی، فقط تازه‌تر از X» یک جا باشد.
+ */
+export function incomingFrom(convs: IgConversation[], sinceMs: number): IgDm[] {
+  const out: IgDm[] = []
+  for (const c of convs) {
+    for (const m of c.messages) {
+      if (m.from_me || !m.text || m.timestamp < sinceMs) continue
+      out.push({
+        message_id: m.id,
+        from_user_id: c.peer_id,
+        from_username: c.peer_username,
+        text: m.text,
+        timestamp: m.timestamp
+      })
+    }
+  }
+  return out.sort((a, b) => a.timestamp - b.timestamp)
 }
 
 export class UnsupportedCapabilityError extends Error {

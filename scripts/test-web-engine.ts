@@ -13,6 +13,9 @@
 import { WebEngine, type WebSessionData, type WebOrigin } from '../src/core/engine/web-engine'
 import { AuthError, RateLimitError } from '../src/core/engine/types'
 import { initDb, closeDb } from '../src/core/db/index'
+import { accountsRepo, rulesRepo, jobsRepo } from '../src/core/db/repos'
+import { initEngines } from '../src/core/engine/index'
+import { pollInbox } from '../src/core/pollers/index'
 import { existsSync, rmSync } from 'node:fs'
 
 const DB = './scratch-web.sqlite'
@@ -542,7 +545,72 @@ async function run(): Promise<void> {
     ib.detach(ACC)
   }
 
-  console.log('\n=== 14. نشست خراب ===')
+  console.log('\n=== 14. نظرسنج دایرکت وقتی ساعت کامپیوتر جلوتر از اینستاگرام است ===')
+  {
+    // سناریوی واقعی گزارش‌شده: کاربر دایرکت «20» می‌دهد و اپ هیچ پیامی نمی‌بیند.
+    // نسخه‌ی قبل خط‌مبنا را با Date.now() می‌ساخت؛ با ساعتِ یک ساعت جلوتر، هر پیام
+    // تازه «قدیمی» حساب می‌شد.
+    const mgr = initEngines({
+      tokenProvider: () => null,
+      sessionStore: { load: () => null, save: () => undefined, clear: () => undefined },
+      webSessionStore: store
+    })
+    const acc = accountsRepo.upsert({ ig_user_id: '12345', username: 'me_shop', engine: 'session' })
+    mgr.setSessionEnabled(true)
+    mgr.web.attach(acc.id, SESSION)
+    rulesRepo.create({
+      account_id: acc.id,
+      name: 'کد ۲۰',
+      trigger_type: 'dm_keyword',
+      match_mode: 'contains',
+      keywords: '20',
+      actions: [{ type: 'send_dm', text: 'لینک شما', order: 0 }]
+    } as never)
+
+    const igNow = 1_700_000_000_000 // «اکنونِ» سرور اینستاگرام
+    const realNow = Date.now
+    Date.now = () => igNow + 60 * 60 * 1000 // ساعت ویندوز یک ساعت جلو
+    const us = (ms: number): string => String(ms * 1000)
+    const inbox = (items: object[]): FakeResponse => ({
+      status: 200,
+      body: JSON.stringify({ inbox: { threads: [{ users: [{ pk: 777, username: 'buyer' }], items }] } })
+    })
+    const empty: FakeResponse = { status: 200, body: JSON.stringify({ inbox: { threads: [] } }) }
+
+    try {
+      responseQueue.length = 0
+      responseQueue.push(
+        inbox([{ item_id: 'old', user_id: 777, timestamp: us(igNow - 5000), item_type: 'text', text: '20' }]),
+        empty
+      )
+      const first = await pollInbox(acc.id)
+      check('دور اول فقط خط‌مبنا', first.ok && first.handled === 0, first.message)
+
+      responseQueue.push(
+        inbox([
+          { item_id: 'old', user_id: 777, timestamp: us(igNow - 5000), item_type: 'text', text: '20' },
+          { item_id: 'new', user_id: 777, timestamp: us(igNow + 30_000), item_type: 'text', text: '20' }
+        ]),
+        empty
+      )
+      const second = await pollInbox(acc.id)
+      check('دایرکت تازه با وجود ساعت جلو دیده شد', second.handled === 1, second.message)
+      check('پیام قدیمیِ خط‌مبنا دوباره جواب نگرفت', second.handled === 1)
+
+      responseQueue.push(
+        inbox([{ item_id: 'new', user_id: 777, timestamp: us(igNow + 30_000), item_type: 'text', text: '20' }]),
+        empty
+      )
+      const third = await pollInbox(acc.id)
+      check('همپوشانی پیام تکراری نمی‌سازد', third.handled === 0, third.message)
+      check('جواب در صف رفت', jobsRepo.list(50).some((j) => j.kind === 'dm.send'))
+    } finally {
+      Date.now = realNow
+      responseQueue.length = 0
+    }
+  }
+
+  console.log('\n=== 15. نشست خراب ===')
   const broken = new WebEngine({
     load: (_id, origin) => (origin === 'window' ? '{ not json' : null),
     save: () => undefined,

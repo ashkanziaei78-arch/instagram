@@ -7,7 +7,7 @@ import {
   settingsRepo
 } from '../db/repos'
 import { engines } from '../engine'
-import { UnsupportedCapabilityError } from '../engine/types'
+import { UnsupportedCapabilityError, incomingFrom } from '../engine/types'
 import {
   enqueueWelcomeForNewFollowers,
   handleIncomingComment,
@@ -299,25 +299,47 @@ export async function pollComments(
  * خط‌مبنا: بار اول فقط زمان را ثبت می‌کند. وگرنه با روشن‌شدن اپ به تمام
  * دایرکت‌های قدیمی که کلیدواژه داشتند یک‌جا جواب می‌رفت.
  */
-export async function pollInbox(accountId: number): Promise<{ ok: boolean; handled: number; message: string }> {
+export interface InboxPollResult {
+  ok: boolean
+  handled: number
+  message: string
+  /** از کدام راه خوانده شد — برای عیب‌یابی */
+  source?: 'web' | 'graph'
+  conversations?: number
+}
+
+interface InboxState {
+  /** بزرگ‌ترین زمان پیامی که دیده‌ایم — به ساعت *سرور اینستاگرام*، نه ساعت این کامپیوتر */
+  cursor: number
+  /** شناسه‌ی پیام‌های پردازش‌شده‌ی اخیر، برای همپوشانی بی‌خطر */
+  seen: string[]
+}
+
+/** پنجره‌ی همپوشانی: کمی عقب‌تر از آخرین پیام را دوباره می‌خوانیم تا چیزی جا نماند */
+const INBOX_OVERLAP_MS = 2 * 60 * 1000
+const INBOX_SEEN_MAX = 400
+const INBOX_MAX_PER_TICK = 60
+
+/**
+ * خط‌مبنا و نشانگر از *زمان پیام‌ها* ساخته می‌شوند، نه از Date.now().
+ *
+ * نسخه‌ی قبل خط‌مبنا را با ساعت همین کامپیوتر می‌ساخت. اگر ساعت ویندوز حتی
+ * چند دقیقه جلو باشد، هر دایرکت تازه «قدیمی‌تر از خط‌مبنا» دیده می‌شد و بی‌صدا
+ * کنار می‌رفت — دقیقا علامت «دایرکت می‌دهم ولی اپ هیچ پیامی نمی‌بیند». حالا
+ * فقط زمان‌های خود اینستاگرام مقایسه می‌شوند و تکرار با شناسه‌ی پیام مهار
+ * می‌شود (الگوی chatmany).
+ */
+export async function pollInbox(accountId: number): Promise<InboxPollResult> {
   const e = engines()
   const hasWeb = e.web.isConnected(accountId)
   const hasGraph = e.graph.isConnected(accountId)
   if (!hasWeb && !hasGraph) return { ok: false, handled: 0, message: 'هیچ اتصالی برای خواندن دایرکت نیست' }
 
-  const key = 'inboxSince:' + accountId
-  const since = settingsRepo.get<number>(key, 0)
-  if (!since) {
-    settingsRepo.set(key, Date.now())
-    return { ok: true, handled: 0, message: 'خط‌مبنای دایرکت‌ها ثبت شد — از این لحظه دایرکت‌های تازه جواب می‌گیرند' }
-  }
-
-  // اول وب (درخواست‌های پیام را هم می‌بیند)، اگر نشد API رسمی. وصل بودن هر
-  // سه روش دقیقا برای همین است: یکی از کار بیفتد، بقیه ادامه می‌دهند.
-  let useWeb = hasWeb
-  let dms
+  // اول وب (درخواست‌های پیام را هم می‌بیند)، اگر نشد API رسمی
+  let source: 'web' | 'graph' = hasWeb ? 'web' : 'graph'
+  let convs
   try {
-    dms = hasWeb ? await e.web.listIncomingDms(accountId, since) : await e.graph.listIncomingDms(accountId, since)
+    convs = hasWeb ? await e.web.listConversations(accountId) : await e.graph.listConversations(accountId)
   } catch (err) {
     if (!(hasWeb && hasGraph)) throw err
     logRepo.add({
@@ -327,37 +349,83 @@ export async function pollInbox(accountId: number): Promise<{ ok: boolean; handl
       message: 'خواندن دایرکت از راه وب نشد، از API رسمی خوانده شد',
       meta: { error: (err as Error).message }
     })
-    useWeb = false
-    dms = await e.graph.listIncomingDms(accountId, since)
+    source = 'graph'
+    convs = await e.graph.listConversations(accountId)
   }
-  let handled = 0
-  let latest = since
-  for (const dm of dms) {
-    latest = Math.max(latest, dm.timestamp)
-    const r = await handleIncomingDm({
-      accountId,
-      fromUserId: dm.from_user_id,
-      fromUsername: dm.from_username,
-      text: dm.text,
-      messageId: dm.message_id,
-      idSource: useWeb ? 'web' : 'graph'
-    })
-    if (r.handled) handled++
-    // هر دایرکت دیده‌شده و سرنوشتش در صفحه‌ی فعالیت — بدون این، «جواب نداد»
-    // از بیرون یکسان به نظر می‌رسید چه پیام دیده نشده بود، چه قانونی نخورده بود
-    logRepo.add({
-      account_id: accountId,
-      level: r.handled ? 'success' : 'info',
-      category: 'dm',
+
+  const key = 'inbox:' + accountId
+  const state = settingsRepo.get<InboxState | null>(key, null)
+  const all = incomingFrom(convs, 0)
+
+  if (!state) {
+    settingsRepo.set(key, {
+      cursor: all.reduce((m, d) => Math.max(m, d.timestamp), 0),
+      seen: all.map((d) => d.message_id).slice(-INBOX_SEEN_MAX)
+    } satisfies InboxState)
+    return {
+      ok: true,
+      handled: 0,
+      source,
+      conversations: convs.length,
       message:
-        'دایرکت از @' + (dm.from_username ?? dm.from_user_id) + ': «' + dm.text.slice(0, 60) + '» → ' + r.reason
-    })
+        'خط‌مبنا ثبت شد (' + convs.length + ' گفت‌وگو). از این لحظه دایرکت‌های تازه جواب می‌گیرند.' +
+        (source === 'graph' && convs.length === 0 ? ' ' + EMPTY_GRAPH_HINT : '')
+    }
   }
-  // بعد از پردازش جلو می‌بریم، نه قبل — اگر وسط کار کرش کند، دفعه‌ی بعد دوباره
-  // امتحان می‌شود و dedupe_key صف جلوی ارسال تکراری را می‌گیرد
-  settingsRepo.set(key, latest)
-  return { ok: true, handled, message: dms.length + ' دایرکت تازه، ' + handled + ' قانون فعال شد' }
+
+  const seen = new Set(state.seen)
+  const fresh = all
+    .filter((d) => d.timestamp >= state.cursor - INBOX_OVERLAP_MS && !seen.has(d.message_id))
+    .slice(0, INBOX_MAX_PER_TICK)
+
+  let handled = 0
+  let cursor = state.cursor
+  try {
+    for (const dm of fresh) {
+      cursor = Math.max(cursor, dm.timestamp)
+      seen.add(dm.message_id)
+      // یک پیام خراب نباید بقیه را متوقف کند
+      let r: { handled: boolean; reason: string }
+      try {
+        r = await handleIncomingDm({
+          accountId,
+          fromUserId: dm.from_user_id,
+          fromUsername: dm.from_username,
+          text: dm.text,
+          messageId: dm.message_id,
+          idSource: source
+        })
+      } catch (err) {
+        r = { handled: false, reason: 'خطا: ' + (err as Error).message }
+      }
+      if (r.handled) handled++
+      logRepo.add({
+        account_id: accountId,
+        level: r.handled ? 'success' : 'info',
+        category: 'dm',
+        message:
+          'دایرکت از @' + (dm.from_username ?? dm.from_user_id) + ': «' + dm.text.slice(0, 60) + '» → ' + r.reason
+      })
+    }
+  } finally {
+    // همیشه ذخیره، حتی اگر وسط کار چیزی بشکند — نشانگرِ گیرکرده یعنی قطعی دائمی
+    settingsRepo.set(key, { cursor, seen: [...seen].slice(-INBOX_SEEN_MAX) } satisfies InboxState)
+  }
+
+  return {
+    ok: true,
+    handled,
+    source,
+    conversations: convs.length,
+    message:
+      (source === 'web' ? 'راه وب' : 'API رسمی') + ': ' + convs.length + ' گفت‌وگو، ' +
+      fresh.length + ' دایرکت تازه، ' + handled + ' قانون فعال شد' +
+      (source === 'graph' && convs.length === 0 ? ' — ' + EMPTY_GRAPH_HINT : '')
+  }
 }
+
+const EMPTY_GRAPH_HINT =
+  'API رسمی هیچ گفت‌وگویی برنگرداند. اگر اپ متا هنوز «Unpublished» است، متا لیست خالی می‌دهد — در داشبورد متا Publish را بزنید.'
 
 /* ══════════════════════════ زمان‌بند ══════════════════════════ */
 

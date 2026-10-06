@@ -8,12 +8,14 @@ import { AutomationsPage } from './pages/Automations'
 import { BroadcastsPage } from './pages/Broadcasts'
 import { ContactsPage } from './pages/Contacts'
 import { DashboardPage } from './pages/Dashboard'
+import { InboxPage } from './pages/Inbox'
 import { LogsPage } from './pages/Logs'
 import { SettingsPage } from './pages/Settings'
 
 type PageKey =
   | 'dashboard'
   | 'automations'
+  | 'inbox'
   | 'broadcasts'
   | 'analytics'
   | 'contacts'
@@ -24,6 +26,7 @@ type PageKey =
 const NAV: { key: PageKey; label: string; icon: string; group: 1 | 2 | 3 }[] = [
   { key: 'dashboard', label: 'داشبورد', icon: '◈', group: 1 },
   { key: 'automations', label: 'اتوماسیون‌ها', icon: '⚡', group: 1 },
+  { key: 'inbox', label: 'صندوق دایرکت', icon: '✉', group: 1 },
   { key: 'broadcasts', label: 'ارسال گروهی', icon: '✈', group: 1 },
   { key: 'analytics', label: 'آنالیتیکس', icon: '▤', group: 2 },
   { key: 'contacts', label: 'مخاطبان', icon: '☷', group: 2 },
@@ -83,6 +86,8 @@ export default function App(): JSX.Element {
         return <DashboardPage accountId={activeId} onGoToAccounts={() => setPage('accounts')} />
       case 'automations':
         return <AutomationsPage accountId={activeId} />
+      case 'inbox':
+        return <InboxPage accountId={activeId} />
       case 'broadcasts':
         return <BroadcastsPage accountId={activeId} />
       case 'analytics':

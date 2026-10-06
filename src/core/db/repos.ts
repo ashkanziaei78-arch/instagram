@@ -838,6 +838,27 @@ export const broadcastsRepo = {
   byId(id: number): Broadcast | undefined {
     return getDb().prepare('SELECT * FROM broadcasts WHERE id=?').get(id) as Broadcast | undefined
   },
+  /** فقط پیش‌نویس‌ها — گیرندگانِ ارسالی که شروع شده نباید وسط کار عوض شود */
+  setAudience(id: number, audience: string): boolean {
+    const bc = this.byId(id)
+    if (!bc || bc.status !== 'draft') return false
+    let filter: Record<string, unknown> = {}
+    try {
+      filter = JSON.parse(bc.filter_json || '{}') as Record<string, unknown>
+    } catch {
+      /* پیش‌فرض */
+    }
+    getDb()
+      .prepare('UPDATE broadcasts SET filter_json=? WHERE id=?')
+      .run(JSON.stringify({ ...filter, audience }), id)
+    return true
+  },
+  remove(id: number): void {
+    const db = getDb()
+    db.prepare('DELETE FROM broadcast_targets WHERE broadcast_id=?').run(id)
+    db.prepare("DELETE FROM jobs WHERE kind='broadcast.tick' AND dedupe_key=?").run('bc:' + id)
+    db.prepare('DELETE FROM broadcasts WHERE id=?').run(id)
+  },
   list(accountId: number): Broadcast[] {
     return getDb()
       .prepare('SELECT * FROM broadcasts WHERE account_id=? ORDER BY id DESC')

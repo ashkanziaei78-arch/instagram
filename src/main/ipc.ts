@@ -487,6 +487,47 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         }))
       ),
 
+    setBroadcastAudience: (p: { broadcastId: number; audience: string }) =>
+      broadcastsRepo.setAudience(p.broadcastId, p.audience)
+        ? ok()
+        : fail('فقط گیرندگان پیش‌نویس قابل تغییر است'),
+
+    deleteBroadcast: (p: { broadcastId: number }) => {
+      const bc = broadcastsRepo.byId(p.broadcastId)
+      if (bc?.status === 'running') return fail('اول ارسال را متوقف کنید')
+      broadcastsRepo.remove(p.broadcastId)
+      return ok()
+    },
+
+    listInbox: async (p: { accountId: number }) => {
+      const e = engines()
+      const hasWeb = e.web.isConnected(p.accountId)
+      const hasGraph = e.graph.isConnected(p.accountId)
+      if (!hasWeb && !hasGraph) return fail('هیچ اتصالی برای خواندن دایرکت نیست')
+      if (hasWeb) {
+        try {
+          return ok({ source: 'web' as const, conversations: await e.web.listConversations(p.accountId) })
+        } catch (err) {
+          if (!hasGraph) throw err
+          return ok({
+            source: 'graph' as const,
+            fallbackReason: (err as Error).message,
+            conversations: await e.graph.listConversations(p.accountId)
+          })
+        }
+      }
+      return ok({ source: 'graph' as const, conversations: await e.graph.listConversations(p.accountId) })
+    },
+
+    sendInboxReply: async (p: { accountId: number; peerId: string; text: string; source: 'web' | 'graph' }) => {
+      if (!p.text.trim()) return fail('متن خالی است')
+      // جواب از همان راهی که گفت‌وگو خوانده شد — شناسه‌ی نفر در هر راه فرق دارد
+      if (p.source === 'web') await engines().web.sendDm(p.accountId, p.peerId, p.text.trim())
+      else await engines().graph.sendDm(p.accountId, p.peerId, p.text.trim())
+      messagesRepo.log({ account_id: p.accountId, contact_ig_id: p.peerId, direction: 'out', text: p.text.trim() })
+      return ok()
+    },
+
     pollInboxNow: async (p: { accountId: number }) => {
       const r = await pollInbox(p.accountId)
       return r.ok ? ok({ handled: r.handled, message: r.message }) : fail(r.message)

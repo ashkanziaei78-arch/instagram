@@ -36,6 +36,18 @@ export interface DashboardStats {
   pollers: boolean
 }
 
+export interface InboxView {
+  source: 'web' | 'graph'
+  /** چرا راه دیگر امتحان شد، اگر شد */
+  fallbackReason?: string
+  conversations: {
+    peer_id: string
+    peer_username?: string
+    pending?: boolean
+    messages: { id: string; from_me: boolean; text: string; timestamp: number }[]
+  }[]
+}
+
 export interface MetaAppConfig {
   appId?: string
   appSecret?: string
@@ -107,6 +119,12 @@ export interface IpcApi {
   listContacts(p: { accountId: number; audience?: string; limit?: number }): Promise<ApiResult<ContactSummary[]>>
   syncFollowers(p: { accountId: number }): Promise<ApiResult<{ total: number; newCount: number; welcomed: number; message: string }>>
   syncFollowing(p: { accountId: number }): Promise<ApiResult<{ total: number; message: string }>>
+  setBroadcastAudience(p: { broadcastId: number; audience: BroadcastTargetFilter['audience'] }): Promise<ApiResult>
+  deleteBroadcast(p: { broadcastId: number }): Promise<ApiResult>
+  /** صندوق دایرکت — گفت‌وگوها با آخرین پیام‌ها */
+  listInbox(p: { accountId: number }): Promise<ApiResult<InboxView>>
+  /** جواب دستی از صفحه‌ی صندوق */
+  sendInboxReply(p: { accountId: number; peerId: string; text: string; source: 'web' | 'graph' }): Promise<ApiResult>
   /** خواندن فوری دایرکت‌ها — بدون منتظر ماندن برای تیک ۹۰ ثانیه‌ای */
   pollInboxNow(p: { accountId: number }): Promise<ApiResult<{ handled: number; message: string }>>
   audienceCount(p: { accountId: number; filter: BroadcastTargetFilter }): Promise<ApiResult<number>>
@@ -175,6 +193,10 @@ export const IPC_CHANNELS: IpcChannel[] = [
   'syncFollowers',
   'syncFollowing',
   'pollInboxNow',
+  'listInbox',
+  'setBroadcastAudience',
+  'deleteBroadcast',
+  'sendInboxReply',
   'audienceCount',
   'listBroadcasts',
   'createBroadcast',

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Broadcast, BroadcastTargetFilter } from '../../shared/types'
 import { Card, EmptyState, Field, Modal, Notice, Select, Spinner } from '../components/ui'
-import { call, fmtDate, fmtFull, toasts } from '../lib/api'
+import { call, callRaw, fmtDate, fmtFull, toasts } from '../lib/api'
 
 const AUDIENCE_OPTIONS: { value: BroadcastTargetFilter['audience']; label: string; note: string }[] = [
   { value: 'followers', label: 'فالوورهای من', note: 'نیازمند ورود ساده یا کد نشست' },
@@ -13,6 +13,14 @@ const AUDIENCE_OPTIONS: { value: BroadcastTargetFilter['audience']; label: strin
   { value: 'following', label: 'کسانی که فالو کرده‌ام', note: 'نیازمند موتور Session' },
   { value: 'mutual', label: 'فالوور متقابل', note: 'نیازمند موتور Session' }
 ]
+
+function audienceOf(b: Broadcast): BroadcastTargetFilter['audience'] {
+  try {
+    return (JSON.parse(b.filter_json || '{}') as BroadcastTargetFilter).audience ?? 'followers'
+  } catch {
+    return 'followers'
+  }
+}
 
 export function BroadcastsPage({ accountId }: { accountId: number | null }): JSX.Element {
   const [list, setList] = useState<Broadcast[]>([])
@@ -113,7 +121,31 @@ export function BroadcastsPage({ accountId }: { accountId: number | null }): JSX
                         · ساخته‌شده {fmtDate(b.created_at)}
                       </p>
                     </div>
-                    <div className="flex gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      {/* گیرندگان پیدا باشند و قابل تغییر: پیش‌نویس‌هایی که با گروه
+                          خالی ساخته شده بودند بدون این فقط با حذف و ساخت دوباره درست می‌شدند */}
+                      {b.status === 'draft' ? (
+                        <select
+                          className="input h-8 w-auto py-0 text-xs"
+                          value={audienceOf(b)}
+                          onChange={(e) => {
+                            void callRaw('setBroadcastAudience', {
+                              broadcastId: b.id,
+                              audience: e.target.value as BroadcastTargetFilter['audience']
+                            }).then(() => void load())
+                          }}
+                        >
+                          {AUDIENCE_OPTIONS.map((a) => (
+                            <option key={a.value} value={a.value}>
+                              {a.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-[11px] text-slate-500">
+                          {AUDIENCE_OPTIONS.find((a) => a.value === audienceOf(b))?.label}
+                        </span>
+                      )}
                       {(b.status === 'draft' || b.status === 'failed') && (
                         <button className="btn-primary btn-sm" onClick={() => void act('startBroadcast', b.id)}>
                           شروع
@@ -127,6 +159,17 @@ export function BroadcastsPage({ accountId }: { accountId: number | null }): JSX
                       {b.status === 'paused' && (
                         <button className="btn-primary btn-sm" onClick={() => void act('resumeBroadcast', b.id)}>
                           ادامه
+                        </button>
+                      )}
+                      {b.status !== 'running' && (
+                        <button
+                          className="btn-danger btn-sm"
+                          onClick={() => {
+                            if (!confirm('ارسال «' + b.name + '» حذف شود؟')) return
+                            void callRaw('deleteBroadcast', { broadcastId: b.id }).then(() => void load())
+                          }}
+                        >
+                          حذف
                         </button>
                       )}
                     </div>

@@ -29,6 +29,11 @@ const events = {
     const listener = (): void => cb()
     ipcRenderer.on(PUSH_EVENTS.accountsChanged, listener)
     return () => ipcRenderer.removeListener(PUSH_EVENTS.accountsChanged, listener)
+  },
+  onLicenseChanged(cb: () => void): () => void {
+    const listener = (): void => cb()
+    ipcRenderer.on(PUSH_EVENTS.license, listener)
+    return () => ipcRenderer.removeListener(PUSH_EVENTS.license, listener)
   }
 }
 

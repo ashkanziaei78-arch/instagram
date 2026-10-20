@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AccountWithLinks } from '../shared/types'
+import type { LicenseView } from '../shared/ipc'
+import markUrl from './assets/mark.png'
 import { ToastHost } from './components/ui'
 import { call, igEvents } from './lib/api'
 import { AccountsPage } from './pages/Accounts'
@@ -52,7 +54,7 @@ function loadAdvanced(): boolean {
 const linkCount = (a: AccountWithLinks): number =>
   Number(a.links.simple) + Number(a.links.sessionid) + Number(a.links.official)
 
-export default function App(): JSX.Element {
+export default function App({ license }: { license: LicenseView }): JSX.Element {
   const [page, setPage] = useState<PageKey>('dashboard')
   const [accounts, setAccounts] = useState<AccountWithLinks[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
@@ -132,13 +134,13 @@ export default function App(): JSX.Element {
       {/* ───── نوار کناری ───── */}
       <aside className="flex w-60 shrink-0 flex-col border-l border-white/[0.06] bg-[#0e1420]">
         <div className="flex items-center gap-2.5 px-4 py-4">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#833ab4] via-[#c13584] to-[#e1306c] text-sm font-bold text-white">
-            IG
-          </span>
+          <img src={markUrl} alt="" className="h-8 w-8 object-contain" />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-100">دایرکت خودکار</p>
+            <p className="truncate text-sm font-semibold text-slate-100">دایرکتینو</p>
             <p className="text-[10px] text-slate-500">
-              اتوماسیون اینستاگرام · نسخه‌ی {__APP_VERSION__}
+              {license.required && license.loggedIn
+                ? license.daysLeft.toLocaleString('fa-IR') + ' روز اشتراک مانده'
+                : 'نسخه‌ی ' + __APP_VERSION__}
             </p>
           </div>
         </div>

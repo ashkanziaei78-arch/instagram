@@ -46,6 +46,8 @@ import {
 import { secureStore } from './secure-store'
 import { generateReply, getAiSettings, setAiSettings, type AiProvider } from '../core/ai/reply'
 import { startWebhookFromSettings, webhookServer } from './webhook-server'
+import { checkLicense, connectViaSite, licenseLogin, licenseLogout, licenseRequired } from './license'
+import { automationAllowed, setAutomationAllowed } from './automation-gate'
 
 const ok = <T>(data?: T): ApiResult<T> => ({ ok: true, data })
 const fail = (error: string, hint?: string): ApiResult<never> => ({ ok: false, error, hint })
@@ -86,12 +88,35 @@ function wrap(
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
   const handlers: { [K in keyof IpcApi]: (arg: never) => unknown } = {
+    /* ═══════════════ اشتراک ═══════════════ */
+
+    getLicense: async () => {
+      const l = await checkLicense()
+      setAutomationAllowed(l.active)
+      return ok(l)
+    },
+
+    licenseLogin: async (p: { username: string; password: string }) => {
+      const l = await licenseLogin(p.username.trim().toLowerCase(), p.password)
+      setAutomationAllowed(l.active)
+      return ok(l)
+    },
+
+    licenseLogout: () => {
+      const l = licenseLogout()
+      setAutomationAllowed(!l.required)
+      return ok(l)
+    },
+
     /* ═══════════════ حساب‌ها ═══════════════ */
 
     listAccounts: () => ok(accountsRepo.all().map(withLinks)),
 
     connectGraphAccount: async () => {
-      const res = await connectInstagramAccount(getWindow() ?? undefined)
+      // نسخه‌ی فروشی: تبادل کد روی سایت انجام می‌شود و Secret داخل اپ نیست
+      const res = licenseRequired()
+        ? { followersCount: 0, followsCount: 0, mediaCount: 0, ...(await connectViaSite()) }
+        : await connectInstagramAccount(getWindow() ?? undefined)
       const account = accountsRepo.upsert({
         ig_user_id: res.igUserId,
         username: res.username,
@@ -732,7 +757,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     },
 
     setPollers: (p: { enabled: boolean }) => {
-      if (p.enabled) pollerScheduler.start()
+      if (p.enabled && automationAllowed()) pollerScheduler.start()
       else pollerScheduler.stop()
       return ok()
     },

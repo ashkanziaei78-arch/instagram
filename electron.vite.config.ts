@@ -39,7 +39,9 @@ const cred = (key: string): string => process.env[key] ?? fileEnv[key] ?? ''
 const bundledCredentials = {
   'process.env.IG_APP_ID': JSON.stringify(cred('IG_APP_ID')),
   'process.env.IG_APP_SECRET': JSON.stringify(cred('IG_APP_SECRET')),
-  'process.env.IG_REDIRECT_URI': JSON.stringify(cred('IG_REDIRECT_URI'))
+  'process.env.IG_REDIRECT_URI': JSON.stringify(cred('IG_REDIRECT_URI')),
+  // آدرس سایت دایرکتینو: با آن، اپ اشتراک را چک می‌کند و اتصال رسمی از راه سایت است
+  'process.env.DIRECTINO_SITE_URL': JSON.stringify(cred('DIRECTINO_SITE_URL'))
 }
 
 export default defineConfig({

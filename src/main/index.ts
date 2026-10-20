@@ -1,4 +1,5 @@
 import { BrowserWindow, Menu, Tray, app, dialog, nativeImage, shell } from 'electron'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { closeDb, initDb } from '../core/db/index'
 import { accountsRepo, logRepo, settingsRepo } from '../core/db/repos'
@@ -11,6 +12,16 @@ import { refreshExpiringTokens, registerIpc } from './ipc'
 import { secureStore } from './secure-store'
 import { setAiKeyProvider } from '../core/ai/reply'
 import { startWebhookFromSettings, webhookServer } from './webhook-server'
+import { checkLicense } from './license'
+import { setAutomationAllowed } from './automation-gate'
+
+/**
+ * اسم اپ از «IG Auto Suite» به «Directino» عوض شد و Electron پوشه‌ی داده را از
+ * روی اسم می‌سازد. اگر پوشه‌ی قدیمی هست، همان را نگه می‌داریم تا حساب‌ها،
+ * قانون‌ها و توکن‌های کاربر بعد از به‌روزرسانی سر جایشان باشند.
+ */
+const legacyUserData = join(app.getPath('appData'), 'IG Auto Suite')
+if (existsSync(legacyUserData)) app.setPath('userData', legacyUserData)
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -44,7 +55,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0b0f17',
-    title: 'IG Auto Suite',
+    title: 'Directino',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -79,12 +90,12 @@ function createWindow(): BrowserWindow {
 }
 
 function createTray(): void {
-  // آیکن ساده‌ی درون‌خطی تا نیازی به فایل دارایی نباشد
+  // نشان دایرکتینو، درون‌خطی تا نیازی به فایل دارایی نباشد
   const icon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOklEQVR42mNgYGD4z4AH/GcgAxCjABPjAxOjAxPjAxPjAxPjAxPjAxPjAxPjAxPjAxPjAxPjAxMDAwMAKZ4K0RFF2rEAAAAASUVORK5CYII='
+    'data:image/png;base64,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'
   )
   tray = new Tray(icon)
-  tray.setToolTip('IG Auto Suite')
+  tray.setToolTip('Directino')
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'نمایش پنجره', click: () => mainWindow?.show() },
@@ -155,7 +166,6 @@ async function bootstrap(): Promise<void> {
   }
 
   registerJobHandlers()
-  jobQueue.start(5000)
 
   setAiKeyProvider((provider) => secureStore().getAiKey(provider))
 
@@ -185,10 +195,15 @@ async function bootstrap(): Promise<void> {
     }
   }
 
-  // نظرسنجی و وبهوک اگر کاربر قبلا روشنشان کرده بود
-  if (settingsRepo.get<boolean>('pollersEnabled', true)) {
-    pollerScheduler.start()
-  }
+  // صف و نظرسنجی فقط با اشتراک فعال؛ نسخه‌ی شخصی (بدون آدرس سایت) همیشه فعال است
+  const license = await checkLicense()
+  setAutomationAllowed(license.active)
+  setInterval(async () => {
+    const l = await checkLicense()
+    setAutomationAllowed(l.active)
+    mainWindow?.webContents.send(PUSH_EVENTS.license)
+  }, 6 * 60 * 60 * 1000)
+
   if (settingsRepo.get<boolean>('webhookEnabled', false)) {
     const port = settingsRepo.get<number>('webhookPort', 8787)
     await startWebhookFromSettings(port)

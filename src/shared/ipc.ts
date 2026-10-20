@@ -98,8 +98,27 @@ export interface ApiResult<T = void> {
   hint?: string
 }
 
+/** وضعیت اشتراک دایرکتینو در اپ دسکتاپ */
+export interface LicenseView {
+  /** false یعنی نسخه‌ی شخصی بدون قفل اشتراک */
+  required: boolean
+  siteUrl: string
+  loggedIn: boolean
+  username?: string
+  active: boolean
+  daysLeft: number
+  subUntil?: string | null
+  /** سایت در دسترس نبود و وضعیت از آخرین بررسی است */
+  offline?: boolean
+}
+
 /** امضای همه‌ی متدهای قابل‌صدازدن از renderer */
 export interface IpcApi {
+  /* اشتراک */
+  getLicense(): Promise<ApiResult<LicenseView>>
+  licenseLogin(p: { username: string; password: string }): Promise<ApiResult<LicenseView>>
+  licenseLogout(): Promise<ApiResult<LicenseView>>
+
   /* حساب‌ها */
   listAccounts(): Promise<ApiResult<AccountWithLinks[]>>
   connectGraphAccount(): Promise<ApiResult<AccountRow>>
@@ -203,6 +222,9 @@ export type IpcChannel = keyof IpcApi
 
 /** همه‌ی کانال‌ها — preload از این لیست برای ساختن پل استفاده می‌کند */
 export const IPC_CHANNELS: IpcChannel[] = [
+  'getLicense',
+  'licenseLogin',
+  'licenseLogout',
   'listAccounts',
   'connectGraphAccount',
   'webLogin',
@@ -263,5 +285,6 @@ export const IPC_CHANNELS: IpcChannel[] = [
 /** رویدادهایی که main به renderer push می‌کند */
 export const PUSH_EVENTS = {
   activity: 'push:activity',
-  accountsChanged: 'push:accounts-changed'
+  accountsChanged: 'push:accounts-changed',
+  license: 'push:license'
 } as const

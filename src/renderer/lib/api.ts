@@ -6,6 +6,7 @@ declare global {
     igEvents: {
       onActivity(cb: () => void): () => void
       onAccountsChanged(cb: () => void): () => void
+      onLicenseChanged(cb: () => void): () => void
     }
   }
 }

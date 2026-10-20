@@ -1,5 +1,5 @@
 appId: com.ashkan.igautosuite
-productName: IG Auto Suite
+productName: Directino
 directories:
   buildResources: build
   output: release
@@ -33,4 +33,4 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
-  shortcutName: IG Auto Suite
+  shortcutName: Directino

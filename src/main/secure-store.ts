@@ -16,6 +16,16 @@ interface VaultShape {
   aiKey?: string
   /** کلید جواب هوشمند به ازای هر سرویس‌دهنده، رمزنگاری‌شده مثل بقیه */
   aiKeys?: Record<string, string>
+  /** ورود به حساب دایرکتینو (اشتراک) */
+  license?: StoredLicense | null
+}
+
+export interface StoredLicense {
+  token: string
+  username: string
+  subUntil: string | null
+  /** آخرین بار که سایت تأیید کرد — برای کار آفلاین محدود */
+  checkedAt: number
 }
 
 const EMPTY: VaultShape = { tokens: {}, sessions: {}, webSessions: {}, metaApp: {} }
@@ -201,6 +211,18 @@ class SecureStore {
     }
     if (key) v.aiKeys[provider] = key
     else delete v.aiKeys[provider]
+    this.write()
+  }
+
+  /* ─────────── اشتراک دایرکتینو ─────────── */
+
+  getLicense(): StoredLicense | null {
+    return this.read().license ?? null
+  }
+
+  setLicense(l: StoredLicense | null): void {
+    const v = this.read()
+    v.license = l
     this.write()
   }
 

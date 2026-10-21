@@ -22,11 +22,21 @@ export async function db(): Promise<postgres.Sql> {
   const url = process.env.DATABASE_URL
   if (!url) throw new NoDbError()
   if (!client) {
-    client = postgres(url, {
+    // آدرس‌های Neon پارامترهای libpq مثل channel_binding دارند که این کتابخانه
+    // به‌عنوان تنظیم سرور می‌فرستد و Postgres ردشان می‌کند؛ SSL را خودمان تعیین می‌کنیم
+    const u = new URL(url)
+    const sslmode = u.searchParams.get('sslmode')
+    for (const k of ['channel_binding', 'sslmode', 'sslrootcert', 'options']) u.searchParams.delete(k)
+    client = postgres(u.toString(), {
       max: 3,
       idle_timeout: 20,
       prepare: false,
-      ssl: process.env.DATABASE_SSL === 'disable' ? false : 'prefer'
+      ssl:
+        process.env.DATABASE_SSL === 'disable' || sslmode === 'disable'
+          ? false
+          : sslmode && sslmode !== 'prefer'
+            ? 'require'
+            : 'prefer'
     })
   }
   if (!ready) {

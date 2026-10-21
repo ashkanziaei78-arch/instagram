@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { PageIntro } from '@/components/PageIntro'
 import { AccountPicker } from '@/components/AccountPicker'
 import { loadDash } from '@/lib/dash'
 import type { ProductRow } from '@/lib/db'
@@ -21,10 +22,10 @@ export default async function Catalog({ searchParams }: { searchParams: Promise<
 
   return (
     <div className="space-y-4">
+      <PageIntro title={c.title} text={t.app.intro.catalog} learn={{ href: lp(lang, '/dashboard/learn/showcase'), label: t.app.learn.help }} />
       <AccountPicker accounts={accounts} current={acc.id} base={lp(lang, '/dashboard/catalog')} label={t.app.account} />
       <section className="card p-6">
-        <h1 className="text-[20px] font-bold">{c.title}</h1>
-        <p className="mt-1 text-[13px] leading-6 text-mist">{c.sub}</p>
+        <p className="text-[13px] leading-6 text-mist">{c.sub}</p>
         {sp.saved && <p className="mt-3 text-[13px] text-emerald-300">{t.app.saved}</p>}
         <form action={saveCatalog} className="mt-5 grid gap-4 sm:grid-cols-3">
           <input type="hidden" name="account" value={acc.id} />

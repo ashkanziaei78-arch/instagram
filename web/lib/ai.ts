@@ -46,3 +46,34 @@ export async function aiReply(opts: {
   const text = d.choices?.[0]?.message?.content?.trim()
   return text ? text.slice(0, 1000) : null
 }
+
+/**
+ * تحلیل کوتاه آمار پنل. فقط عددهای جمع‌شده فرستاده می‌شود — نه متن پیام‌ها و نه
+ * اطلاعات مخاطبان — تا داده‌ی مشتری‌ها به سرویس هوش مصنوعی نرود.
+ */
+export async function aiAnalyze(opts: { baseUrl: string; model: string; apiKey: string; lang: 'fa' | 'en'; facts: string }): Promise<string> {
+  const res = await fetch(opts.baseUrl.replace(/\/$/, '') + '/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + opts.apiKey },
+    signal: AbortSignal.timeout(20_000),
+    body: JSON.stringify({
+      model: opts.model,
+      max_tokens: 350,
+      temperature: 0.3,
+      messages: [
+        {
+          role: 'system',
+          content:
+            (opts.lang === 'fa' ? 'Answer in Persian (Farsi). ' : 'Answer in English. ') +
+            'You are an Instagram growth analyst for a small online business using DM automation. ' +
+            'Given the aggregated stats, write exactly 3 short bullet points: what went well, what to watch, and one concrete action for this week. ' +
+            'Plain language for a non-technical shop owner, no jargon, no made-up numbers, max 25 words per bullet. Use "• " bullets only.'
+        },
+        { role: 'user', content: opts.facts }
+      ]
+    })
+  })
+  if (!res.ok) throw new Error(res.status + ': ' + (await res.text()).slice(0, 160))
+  const d = (await res.json()) as { choices?: { message?: { content?: string } }[] }
+  return (d.choices?.[0]?.message?.content ?? '').trim().slice(0, 1500)
+}

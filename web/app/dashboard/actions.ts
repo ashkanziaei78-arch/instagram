@@ -261,3 +261,55 @@ export async function saveAi(form: FormData): Promise<void> {
   await sql`update dx_ig_accounts set settings = settings || ${sql.json({ ai })} where id = ${acc!.id}`
   redirect(await page('/dashboard/settings', '?a=' + acc!.id + '&saved=ai'))
 }
+
+/* ─────────── تحلیل هوش مصنوعی ─────────── */
+
+export interface BriefState {
+  text?: string
+  error?: string
+}
+
+export async function aiBrief(_: BriefState, form: FormData): Promise<BriefState> {
+  const user = await requireUser()
+  const lang = await getLang()
+  const sql = await db()
+  const { computeStats, parseFilter } = await import('@/lib/stats')
+  const { aiAnalyze, AI_PROVIDERS } = await import('@/lib/ai')
+  const f = parseFilter({ r: str(form, 'r'), acc: str(form, 'acc'), k: str(form, 'k') })
+  // اولین پیجی که هوش مصنوعی دارد (یا همان پیج فیلترشده)
+  const accounts = await sql<IgAccountRow[]>`select * from dx_ig_accounts where user_id = ${user.id} order by id`
+  const withAi = accounts.find((a) => (!f.accountId || a.id === f.accountId) && a.settings?.ai?.keyEnc) ?? accounts.find((a) => a.settings?.ai?.keyEnc)
+  const ai = withAi?.settings?.ai
+  if (!ai?.keyEnc) return { error: 'no-ai' }
+  const s = await computeStats(sql, user.id, f)
+  const [{ rules, forms, gates }] = await sql<{ rules: number; forms: number; gates: number }[]>`
+    select count(*)::int as rules,
+      count(*) filter (where questions is not null)::int as forms,
+      count(*) filter (where follow_gate is not null)::int as gates
+    from dx_rules where user_id = ${user.id} and enabled`
+  const facts = JSON.stringify({
+    periodDays: f.days,
+    messagesSent: s.total,
+    previousPeriod: s.prevTotal,
+    bySource: Object.fromEntries(s.byKind.map((k) => [k.kind, k.n])),
+    topReplies: s.topRules,
+    newContacts: s.newContacts,
+    leadsFromForms: s.leads,
+    activeRules: rules,
+    rulesWithForm: forms,
+    rulesWithFollowGate: gates
+  })
+  const preset = AI_PROVIDERS[ai.provider ?? 'openai'] ?? AI_PROVIDERS.openai
+  try {
+    const text = await aiAnalyze({
+      baseUrl: ai.baseUrl || preset.baseUrl,
+      model: ai.model || preset.model,
+      apiKey: unseal(ai.keyEnc),
+      lang,
+      facts
+    })
+    return text ? { text } : { error: 'empty' }
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+}

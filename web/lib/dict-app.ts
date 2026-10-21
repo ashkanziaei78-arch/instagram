@@ -1,8 +1,86 @@
 /** متن‌های بخش‌های تازه‌ی پنل (نسخه‌ی ۲). ساختار en باید دقیقاً مثل fa باشد. */
 
+/** یک مرحله‌ی آموزش: متن تنها، یا با تصویر (public/learn/{img}-{lang}.webp)، مسیر منو یا طرح */
+export type LearnStep = string | { t: string; img?: string; path?: string[]; art?: 'allow' | 'home' }
+
 export const appFa = {
-  nav: { home: 'خانه', rules: 'جواب‌ها', contacts: 'مخاطبان', tools: 'ابزارها', settings: 'تنظیمات', catalog: 'ویترین' },
+  nav: { home: 'خانه', rules: 'جواب‌ها', contacts: 'مخاطبان', tools: 'ابزارها', settings: 'تنظیمات', catalog: 'ویترین', learn: 'آموزش' },
   account: 'پیج',
+  suggest: {
+    button: 'پیشنهادها',
+    title: 'کارهای پیشنهادی امروز',
+    sub: 'بر اساس وضعیت پیج شما — هر کدام را بزنید مستقیم به همان بخش می‌روید.',
+    later: 'بعداً',
+    empty: 'همه‌چیز مرتب است 👌 پیشنهاد تازه‌ای نیست.',
+    tags: { must: 'لازم', grow: 'رشد' } as Record<string, string>,
+    items: {
+      renew: ['اشتراک فعال نیست', 'تا تمدید نکنید، هیچ جوابی برای مشتری‌ها نمی‌رود.', 'تمدید'],
+      ending: ['{n} روز تا پایان اشتراک', 'تمدید کنید تا جواب‌ها حتی یک ساعت هم قطع نشوند.', 'تمدید'],
+      connect: ['پیج اینستاگرام را وصل کنید', 'بدون اتصال پیج، دایرکتینو نمی‌تواند کامنت‌ها و دایرکت‌ها را ببیند.', 'اتصال پیج'],
+      webhook: ['دریافت پیام‌های یک پیج قطع است', 'یک بار دوباره «اتصال پیج» را بزنید تا رویدادها دوباره برسند.', 'اتصال دوباره'],
+      firstRule: ['اولین جواب خودکار را بسازید', 'قالب «لینک محصول» را بزنید؛ کمتر از یک دقیقه طول می‌کشد.', 'ساخت جواب'],
+      comment: ['جواب کامنت ندارید', 'بیشترین فروش از «۱ کامنت کن» می‌آید. یک جواب برای کامنت بسازید.', 'ساخت جواب'],
+      welcome: ['پیام خوشامد بگذارید', 'به هر کسی که اولین بار پیام می‌دهد خودکار سلام کنید و منو را نشانش بدهید.', 'ساخت خوشامد'],
+      form: ['شماره‌ی مشتری‌ها را جمع کنید', 'به پرکارترین جوابتان یک فرم کوتاه (نام و شماره) اضافه کنید تا لید داشته باشید.', 'افزودن فرم'],
+      gate: ['فالوور بگیرید', 'با «اول فالو کن»، لینک فقط به فالوورها می‌رسد؛ راه ساده‌ی رشد پیج با هر پست.', 'فعال کردن'],
+      ice: ['منوی سؤال‌های سریع بسازید', 'مشتری قبل از تایپ، دکمه‌های «قیمت؟» و «ارسال؟» را می‌بیند.', 'ساخت منو'],
+      showcase: ['ویترین محصولات بسازید', 'با یک کلمه، همه‌ی محصولات به‌صورت کارت عکس‌دار در دایرکت می‌رود.', 'افزودن محصول'],
+      moderation: ['فیلتر کامنت را روشن کنید', 'کامنت‌های اسپم و تبلیغ رقبا خودکار مخفی شوند.', 'تنظیم فیلتر'],
+      ai: ['هوش مصنوعی را وصل کنید', 'سؤال‌هایی که جواب آماده ندارند هم بی‌جواب نمی‌مانند.', 'تنظیم هوش مصنوعی'],
+      broadcast: ['{n} نفر امروز پیام داده‌اند', 'تا ۲۴ ساعت می‌توانید برایشان پیشنهاد یا تخفیف بفرستید.', 'ارسال پیام'],
+      idle: ['هفته‌ی گذشته پیامی نرفته', 'در کپشن پست بعدی بنویسید «برای لینک ۱ کامنت کن» تا جواب‌ها کار کنند.', 'دیدن جواب‌ها'],
+      export: ['{n} لید جمع شده', 'از بخش مخاطبان خروجی اکسل بگیرید و با آن‌ها تماس بگیرید.', 'دیدن مخاطبان']
+    } as Record<string, [string, string, string]>
+  },
+  menu: {
+    open: 'باز کردن منو',
+    close: 'بستن منو',
+    items: {
+      home: 'خلاصه‌ی وضعیت، اشتراک، نمودارها و آخرین پیام‌ها',
+      rules: 'تعریف کنید به چه کلمه‌ای، چه جوابی برود',
+      contacts: 'همه‌ی کسانی که کامنت گذاشتند یا پیام دادند',
+      catalog: 'محصولات را به‌صورت کارت در دایرکت بفرستید',
+      tools: 'قرعه‌کشی، فیلتر کامنت، منوی سریع و پیام گروهی',
+      settings: 'هوش مصنوعی، نصب روی گوشی و حذف حساب',
+      learn: 'ویدیو و تصویر قدم‌به‌قدم برای هر بخش'
+    } as Record<string, string>
+  },
+  intro: {
+    home: 'اینجا در یک نگاه می‌بینید دایرکتینو چقدر برایتان کار کرده. با فیلترهای بالای نمودار، بازه و نوع پیام را عوض کنید.',
+    rules: 'هر «جواب خودکار» یک قانون است: «وقتی کسی این کار را کرد و این کلمه را نوشت، این پیام برود». از یک قالب شروع کنید؛ امکانات پیشرفته مثل فرم و شرط فالو داخل «تنظیمات پیشرفته» است.',
+    contacts: 'هر کسی که زیر پستتان کامنت گذاشته یا دایرکت داده، خودکار اینجا ذخیره می‌شود. شماره و ایمیلی که با فرم جمع شده هم اینجاست. با برچسب دسته‌بندی کنید و خروجی اکسل بگیرید.',
+    catalog: 'چند محصول با عکس و لینک اضافه کنید. وقتی کسی در دایرکت یکی از کلمه‌های تعیین‌شده (مثلاً «محصولات») را بنویسد، همه را به‌صورت کارت‌های کنار هم می‌بیند.',
+    tools: 'ابزارهای جانبی پیج: برنده‌ی مسابقه را از کامنت‌ها انتخاب کنید، کامنت‌های اسپم را خودکار مخفی کنید، منوی سؤال‌های دایرکت را بچینید و به مخاطبان امروز پیام بدهید.',
+    settings: 'هوش مصنوعی را برای جواب سؤال‌هایی که قانون ندارند وصل کنید، پنل را روی گوشی نصب کنید یا حسابتان را حذف کنید.'
+  },
+  filters: {
+    range: 'بازه',
+    days: { '7': '۷ روز', '30': '۳۰ روز', '90': '۹۰ روز' } as Record<string, string>,
+    kind: 'نوع',
+    allKinds: 'همه',
+    account: 'پیج',
+    allAccounts: 'همه‌ی پیج‌ها',
+    daily: (d: string) => `پیام‌های فرستاده‌شده — ${d} اخیر`
+  },
+  brief: {
+    title: 'خلاصه',
+    aiTitle: 'تحلیل هوش مصنوعی',
+    aiButton: 'نوشتن تحلیل با هوش مصنوعی',
+    aiHint: 'برای تحلیل هوشمند، در تنظیمات یک سرویس هوش مصنوعی وصل کنید.',
+    aiError: 'هوش مصنوعی جواب نداد: ',
+    writing: 'در حال نوشتن…',
+    sent: (n: string, d: string) => `در ${d} اخیر ${n} پیام خودکار فرستاده شد`,
+    up: (p: string) => `، ${p}٪ بیشتر از دوره‌ی قبل.`,
+    down: (p: string) => `، ${p}٪ کمتر از دوره‌ی قبل.`,
+    flat: '، تقریباً مثل دوره‌ی قبل.',
+    first: '.',
+    topKind: (k: string, p: string) => `بیشترِ پیام‌ها (${p}٪) از «${k}» بود.`,
+    leads: (n: string) => `${n} شماره یا ایمیل از فرم‌ها جمع شد.`,
+    noLeads: 'هنوز با فرم شماره‌ای جمع نشده؛ به پرکارترین جوابتان یک فرم کوتاه اضافه کنید.',
+    topRule: (r: string, n: string) => `پرکارترین جواب: «${r}» با ${n} بار.`,
+    idle: 'در این بازه پیامی نرفته. یک جواب خودکار بسازید و در کپشن پست بنویسید «۱ کامنت کن».',
+    newContacts: (n: string) => `${n} مخاطب تازه اضافه شد.`
+  },
   charts: {
     daily: 'پیام‌های فرستاده‌شده — ۳۰ روز اخیر',
     dailyEmpty: 'هنوز داده‌ای برای نمودار نیست؛ با اولین جواب خودکار پر می‌شود.',
@@ -140,6 +218,74 @@ export const appFa = {
     },
     saved: 'ذخیره شد.'
   },
+  learn: {
+    title: 'آموزش',
+    intro: 'هر بخش دایرکتینو یک آموزش کوتاه دارد: ویدیوهای زیر یک دقیقه از روی خود پنل، و راهنمای تصویری برای کارهایی که بیرون از پنل انجام می‌شود (مثل اینستاگرام و نصب روی گوشی).',
+    video: 'ویدیو',
+    images: 'راهنمای تصویری',
+    secs: (n: string) => `${n} ثانیه`,
+    stepsN: (n: string) => `${n} مرحله`,
+    steps: 'مرحله‌ها',
+    open: 'رفتن به همین بخش',
+    next: 'آموزش بعدی',
+    all: 'همه‌ی آموزش‌ها',
+    help: 'آموزش این بخش',
+    allow: { wants: 'دایرکتینو می‌خواهد:', p1: 'پیام‌های دایرکت را ببیند و جواب بدهد', p2: 'کامنت‌ها را ببیند و مدیریت کند', p3: 'اطلاعات پایه‌ی پیج را بخواند', cancel: 'Cancel', ok: 'Allow' },
+    home: 'صفحه‌ی اصلی گوشی',
+    lessons: {
+      start: {
+        title: 'ساخت حساب و شروع',
+        sub: 'از ثبت‌نام تا خرید اشتراک و اتصال پیج',
+        steps: ['یک نام کاربری انگلیسی و یک رمز بنویسید', 'روی «ساخت حساب» بزنید', 'پنل باز شد. پیشنهادهای امروز کارهای لازم را نشان می‌دهد', 'اول اشتراک را بخرید؛ روزهای باقی‌مانده همین‌جا دیده می‌شود', 'بعد «اتصال پیج» را بزنید و در صفحه‌ی اینستاگرام «Allow» بدهید']
+      },
+      connect: {
+        title: 'وصل کردن پیج اینستاگرام',
+        sub: 'پیج باید حرفه‌ای (Business یا Creator) باشد',
+        steps: [
+          { t: 'پیج اینستاگرام باید «حرفه‌ای» باشد. اگر نیست، در خود اپ اینستاگرام این مسیر را بروید (رایگان است و پست‌ها دست نمی‌خورند):', path: ['تنظیمات', 'نوع حساب و ابزارها', 'تغییر به حساب حرفه‌ای'] },
+          { t: 'در صفحه‌ی «خانه»ی دایرکتینو، روی «اتصال پیج» بزنید.', img: 'connect-1' },
+          { t: 'صفحه‌ی ورود اینستاگرام باز می‌شود. وارد همان پیج شوید و «Allow» (اجازه) را بزنید.', art: 'allow' },
+          { t: 'به پنل برمی‌گردید و پیج در فهرست دیده می‌شود. از همین لحظه جواب‌های خودکار کار می‌کنند.', img: 'connect-2' },
+          { t: 'برای اینکه جواب دایرکت‌ها هم برسد، این گزینه را در اینستاگرام روشن کنید:', path: ['تنظیمات', 'پیام‌ها و پاسخ به استوری', 'کنترل پیام‌ها', 'ابزارهای متصل', 'اجازه‌ی دسترسی به پیام‌ها'] }
+        ]
+      },
+      'first-reply': {
+        title: 'اولین جواب خودکار',
+        sub: 'هر کس «۱» کامنت کرد، لینک محصول را در دایرکت بگیرد',
+        steps: ['منو را باز کنید', 'بخش «جواب‌ها» را بزنید', 'یک قالب انتخاب کنید؛ مثلاً «لینک محصول»', 'لینک محصولتان را جلوی دکمه بگذارید', 'اگر فقط برای یک پست است، پست را انتخاب کنید', '«ذخیره و فعال‌سازی» — از همین لحظه کار می‌کند', 'جواب ساخته شد ✓ حالا کسی «۱» کامنت کند، دایرکت می‌گیرد']
+      },
+      form: {
+        title: 'جمع کردن شماره‌ی مشتری',
+        sub: 'یک فرم کوتاه نام و موبایل داخل دایرکت',
+        steps: ['قالب «لینک محصول» را بزنید', '«تنظیمات پیشرفته» را باز کنید', '«سؤال دلخواه» را بزنید؛ سؤال نام آماده است', 'یک بار دیگر بزنید تا شماره موبایل هم پرسیده شود', 'پیام پایان فرم را بنویسید', 'ذخیره کنید. جواب‌ها در «مخاطبان» جمع می‌شوند']
+      },
+      showcase: {
+        title: 'ویترین محصولات',
+        sub: 'محصولات به‌صورت کارت عکس‌دار در دایرکت',
+        steps: ['از منو «ویترین» را باز کنید', 'کلمه‌هایی که ویترین را نشان می‌دهند', 'پیام قبل از ویترین و متن دکمه را بنویسید و ذخیره کنید', 'حالا محصول اضافه کنید: نام و قیمت', 'لینک خرید را بگذارید و «افزودن محصول»', 'هر کس در دایرکت بنویسد «محصولات»، کارت‌ها را می‌بیند']
+      },
+      contacts: {
+        title: 'مخاطبان و خروجی اکسل',
+        sub: 'جستجو، برچسب و دانلود همه‌ی مشتری‌ها',
+        steps: ['از منو «مخاطبان» را باز کنید', 'همه‌ی کامنت‌گذارها و پیام‌دهنده‌ها اینجا هستند', 'جستجو بر اساس نام، آیدی یا شماره', 'برای هر نفر برچسب بگذارید', 'با «خروجی اکسل» همه را دانلود کنید']
+      },
+      giveaway: {
+        title: 'قرعه‌کشی از کامنت‌ها',
+        sub: 'برنده‌ی مسابقه در چند ثانیه، منصفانه',
+        steps: ['از منو «ابزارها» را باز کنید', 'پست مسابقه را انتخاب کنید', 'تعداد برنده را بنویسید', '«انتخاب برنده» — هر نفر فقط یک شانس دارد', 'برنده مشخص شد 🎉']
+      },
+      install: {
+        title: 'نصب روی گوشی',
+        sub: 'مثل یک اپ، با یک لمس باز شود',
+        steps: [
+          { t: 'همین سایت را در مرورگر گوشی باز کنید و وارد حساب شوید.' },
+          { t: 'اندروید (Chrome): منوی سه‌نقطه را بزنید و «نصب برنامه» یا «افزودن به صفحه‌ی اصلی» را انتخاب کنید.', path: ['⋮', 'Install app', 'Install'] },
+          { t: 'آیفون (Safari): دکمه‌ی اشتراک‌گذاری پایین صفحه را بزنید و «Add to Home Screen» را انتخاب کنید.', path: ['Share', 'Add to Home Screen', 'Add'] },
+          { t: 'آیکن دایرکتینو روی صفحه‌ی گوشی می‌آید و پنل تمام‌صفحه، مثل یک اپ، باز می‌شود.', art: 'home' }
+        ]
+      }
+    } as Record<string, { title: string; sub: string; steps: LearnStep[] }>
+  },
   saved: 'ذخیره شد.',
   needAccount: 'برای این بخش اول یک پیج اینستاگرام وصل کنید.'
 }
@@ -147,8 +293,83 @@ export const appFa = {
 export type AppDict = typeof appFa
 
 export const appEn: AppDict = {
-  nav: { home: 'Home', rules: 'Replies', contacts: 'Contacts', tools: 'Tools', settings: 'Settings', catalog: 'Showcase' },
+  nav: { home: 'Home', rules: 'Replies', contacts: 'Contacts', tools: 'Tools', settings: 'Settings', catalog: 'Showcase', learn: 'Tutorials' },
   account: 'Account',
+  suggest: {
+    button: 'Suggestions',
+    title: 'Suggested for today',
+    sub: 'Based on your account’s current state — tap one to jump straight to it.',
+    later: 'Later',
+    empty: 'All set 👌 nothing new to suggest.',
+    tags: { must: 'Needed', grow: 'Growth' },
+    items: {
+      renew: ['Your subscription isn’t active', 'Until you renew, no replies are sent to your customers.', 'Renew'],
+      ending: ['{n} days left on your subscription', 'Renew so replies never stop, not even for an hour.', 'Renew'],
+      connect: ['Connect your Instagram account', 'Without a connected account, Directino can’t see comments or DMs.', 'Connect account'],
+      webhook: ['One account isn’t receiving messages', 'Tap “Connect account” once more to restore events.', 'Reconnect'],
+      firstRule: ['Create your first auto-reply', 'Tap the “Product link” template — it takes under a minute.', 'Create reply'],
+      comment: ['No comment auto-reply yet', 'Most sales come from “comment 1”. Add a reply for comments.', 'Create reply'],
+      welcome: ['Add a welcome message', 'Greet everyone who messages you for the first time and show them your menu.', 'Create welcome'],
+      form: ['Collect customers’ phone numbers', 'Add a short form (name and phone) to your busiest reply to capture leads.', 'Add a form'],
+      gate: ['Grow your followers', 'With “follow first”, the link only goes to followers — easy growth with every post.', 'Turn on'],
+      ice: ['Set up quick questions', 'Customers see “Prices?” and “Shipping?” buttons before they type.', 'Create menu'],
+      showcase: ['Build a product showcase', 'One word sends all your products as image cards in DMs.', 'Add products'],
+      moderation: ['Turn on the comment filter', 'Hide spam and competitor ads automatically.', 'Set up filter'],
+      ai: ['Connect AI', 'Questions without a ready-made answer won’t go unanswered.', 'Set up AI'],
+      broadcast: ['{n} people messaged you today', 'For 24 hours you can send them an offer or discount.', 'Send message'],
+      idle: ['Nothing was sent last week', 'Write “comment 1 for the link” in your next caption so your replies kick in.', 'View replies'],
+      export: ['{n} leads collected', 'Export them from Contacts and follow up.', 'View contacts']
+    }
+  },
+  menu: {
+    open: 'Open menu',
+    close: 'Close menu',
+    items: {
+      home: 'Status, subscription, charts and latest messages',
+      rules: 'Decide which words get which reply',
+      contacts: 'Everyone who commented or messaged you',
+      catalog: 'Send your products as cards in DMs',
+      tools: 'Giveaways, comment filter, quick menu and broadcasts',
+      settings: 'AI replies, install on your phone, delete account',
+      learn: 'Step-by-step videos and pictures for every section'
+    }
+  },
+  intro: {
+    home: 'See at a glance how much Directino has done for you. Use the filters above the charts to change the period and message type.',
+    rules: 'Each auto-reply is a rule: “when someone does this and writes this word, send this message”. Start from a template; advanced options like forms and follow-gating are under “Advanced settings”.',
+    contacts: 'Everyone who comments on your posts or DMs you is saved here automatically, along with phone numbers and emails collected by forms. Organise them with tags and export to Excel.',
+    catalog: 'Add a few products with a photo and link. When someone writes one of your showcase words in DMs (e.g. “products”), they get them all as swipeable cards.',
+    tools: 'Extra tools for your account: draw giveaway winners from comments, hide spam comments automatically, set up the DM question menu and message today’s contacts.',
+    settings: 'Connect AI to answer questions no rule covers, install the dashboard on your phone, or delete your account.'
+  },
+  filters: {
+    range: 'Period',
+    days: { '7': '7 days', '30': '30 days', '90': '90 days' },
+    kind: 'Type',
+    allKinds: 'All',
+    account: 'Account',
+    allAccounts: 'All accounts',
+    daily: (d: string) => `Messages sent — last ${d}`
+  },
+  brief: {
+    title: 'Summary',
+    aiTitle: 'AI analysis',
+    aiButton: 'Write an AI analysis',
+    aiHint: 'For an AI analysis, connect an AI provider in Settings.',
+    aiError: 'The AI didn’t respond: ',
+    writing: 'Writing…',
+    sent: (n: string, d: string) => `In the last ${d}, ${n} automatic messages were sent`,
+    up: (p: string) => ` — ${p}% more than the previous period.`,
+    down: (p: string) => ` — ${p}% fewer than the previous period.`,
+    flat: ' — about the same as the previous period.',
+    first: '.',
+    topKind: (k: string, p: string) => `Most of them (${p}%) came from “${k}”.`,
+    leads: (n: string) => `${n} phone numbers or emails were collected by forms.`,
+    noLeads: 'No leads collected by forms yet — add a short form to your busiest reply.',
+    topRule: (r: string, n: string) => `Busiest reply: “${r}” (${n} times).`,
+    idle: 'Nothing was sent in this period. Create an auto-reply and write “comment 1” in your next caption.',
+    newContacts: (n: string) => `${n} new contacts were added.`
+  },
   charts: {
     daily: 'Messages sent — last 30 days',
     dailyEmpty: 'No data yet; this fills in with your first auto-reply.',
@@ -285,6 +506,74 @@ export const appEn: AppDict = {
       save: 'Save'
     },
     saved: 'Saved.'
+  },
+  learn: {
+    title: 'Tutorials',
+    intro: 'Every part of Directino has a short tutorial: under-a-minute videos recorded in the dashboard itself, and picture guides for things you do outside it (like on Instagram or installing on your phone).',
+    video: 'Video',
+    images: 'Picture guide',
+    secs: (n: string) => `${n} sec`,
+    stepsN: (n: string) => `${n} steps`,
+    steps: 'Steps',
+    open: 'Go to this section',
+    next: 'Next tutorial',
+    all: 'All tutorials',
+    help: 'How this works',
+    allow: { wants: 'Directino would like to:', p1: 'Read and reply to your direct messages', p2: 'Read and manage your comments', p3: 'Read your basic account info', cancel: 'Cancel', ok: 'Allow' },
+    home: 'Phone home screen',
+    lessons: {
+      start: {
+        title: 'Create your account',
+        sub: 'From sign-up to buying a plan and connecting your account',
+        steps: ['Choose a username and a password', 'Tap “Create account”', 'Your dashboard opens. Today’s suggestions show what to do first', 'First buy a plan — your remaining days show up right here', 'Then tap “Connect account” and tap “Allow” on Instagram']
+      },
+      connect: {
+        title: 'Connect your Instagram account',
+        sub: 'It must be a professional (Business or Creator) account',
+        steps: [
+          { t: 'Your Instagram account must be “professional”. If it isn’t, switch in the Instagram app (it’s free and your posts stay as they are):', path: ['Settings', 'Account type and tools', 'Switch to professional account'] },
+          { t: 'On Directino’s Home, tap “Connect account”.', img: 'connect-1' },
+          { t: 'Instagram’s login opens. Log in to that account and tap “Allow”.', art: 'allow' },
+          { t: 'You’re back in the dashboard and the account is listed. Auto-replies work from this moment.', img: 'connect-2' },
+          { t: 'So DM replies arrive too, turn this on in Instagram:', path: ['Settings', 'Messages and story replies', 'Message controls', 'Connected tools', 'Allow access to messages'] }
+        ]
+      },
+      'first-reply': {
+        title: 'Your first auto-reply',
+        sub: 'Everyone who comments “1” gets the product link by DM',
+        steps: ['Open the menu', 'Tap “Replies”', 'Pick a template — e.g. “Product link”', 'Paste your product link next to the button', 'For a single post, choose it here', '“Save and activate” — it works from now on', 'Done ✓ Anyone who comments “1” now gets the DM']
+      },
+      form: {
+        title: 'Collect phone numbers',
+        sub: 'A short name-and-phone form inside DMs',
+        steps: ['Tap the “Product link” template', 'Open “Advanced settings”', 'Tap “Custom question” — a name question is ready', 'Tap again to also ask for a phone number', 'Write the message for when the form is done', 'Save. Answers are collected under Contacts']
+      },
+      showcase: {
+        title: 'Product showcase',
+        sub: 'Your products as image cards in DMs',
+        steps: ['Open “Showcase” from the menu', 'Words that trigger the showcase', 'Write the intro and button text, then save', 'Now add a product: name and price', 'Add the buy link and tap “Add product”', 'Anyone who DMs “products” gets the cards']
+      },
+      contacts: {
+        title: 'Contacts and Excel export',
+        sub: 'Search, tag and download all your customers',
+        steps: ['Open “Contacts” from the menu', 'Everyone who commented or messaged is here', 'Search by name, handle or phone', 'Tag people to organise them', 'Download everyone with “Export (CSV)”']
+      },
+      giveaway: {
+        title: 'Giveaway from comments',
+        sub: 'A fair winner in seconds',
+        steps: ['Open “Tools” from the menu', 'Choose the giveaway post', 'Set the number of winners', '“Draw winners” — one chance per person', 'We have a winner 🎉']
+      },
+      install: {
+        title: 'Install on your phone',
+        sub: 'Opens like an app with one tap',
+        steps: [
+          { t: 'Open this site in your phone’s browser and log in.' },
+          { t: 'Android (Chrome): tap the three-dot menu and choose “Install app” or “Add to Home screen”.', path: ['⋮', 'Install app', 'Install'] },
+          { t: 'iPhone (Safari): tap the Share button at the bottom and choose “Add to Home Screen”.', path: ['Share', 'Add to Home Screen', 'Add'] },
+          { t: 'The Directino icon appears on your home screen and the dashboard opens full-screen, like an app.', art: 'home' }
+        ]
+      }
+    }
   },
   saved: 'Saved.',
   needAccount: 'Connect an Instagram account first to use this.'

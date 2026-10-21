@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { PageIntro } from '@/components/PageIntro'
 import Link from 'next/link'
 import { AccountPicker } from '@/components/AccountPicker'
 import { loadDash } from '@/lib/dash'
@@ -39,16 +40,12 @@ export default async function Contacts({ searchParams }: { searchParams: Promise
 
   return (
     <div className="space-y-4">
+      <PageIntro title={c.title} text={t.app.intro.contacts} learn={{ href: lp(lang, '/dashboard/learn/contacts'), label: t.app.learn.help }}>
+        <a href={'/dashboard/contacts/export?a=' + acc.id} className="btn btn-ghost btn-sm">{c.export}</a>
+      </PageIntro>
       <AccountPicker accounts={accounts} current={acc.id} base={base} label={t.app.account} />
       <section className="card p-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-[20px] font-bold">{c.title}</h1>
-            <p className="mt-1 text-[13px] text-mist">{c.sub}</p>
-          </div>
-          <a href={'/dashboard/contacts/export?a=' + acc.id} className="btn btn-ghost btn-sm">{c.export}</a>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-3 text-[13px] text-mist">
+        <div className="flex flex-wrap gap-3 text-[13px] text-mist">
           <span className="chip bg-white/[0.06]">{num(lang, stats.total)} {c.total}</span>
           <span className="chip bg-emerald-400/10 text-emerald-200">{num(lang, stats.window)} {c.window}</span>
         </div>

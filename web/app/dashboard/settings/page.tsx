@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { PageIntro } from '@/components/PageIntro'
 import { AccountPicker } from '@/components/AccountPicker'
 import { AI_PROVIDERS } from '@/lib/ai'
 import { isActive } from '@/lib/auth'
@@ -23,8 +24,8 @@ export default async function Settings({ searchParams }: { searchParams: Promise
 
   return (
     <div className="space-y-4">
+      <PageIntro title={s.title} text={t.app.intro.settings} learn={{ href: lp(lang, '/dashboard/learn/install'), label: t.app.learn.help }} />
       <AccountPicker accounts={accounts} current={acc?.id} base={lp(lang, '/dashboard/settings')} label={t.app.account} />
-      <h1 className="text-[20px] font-bold">{s.title}</h1>
       {sp.del === 'confirm' && <p className="rounded-2xl border border-magenta/30 bg-magenta/10 px-4 py-3 text-[14px]">{d.flash['del=confirm']}</p>}
 
       <section className="card p-6">

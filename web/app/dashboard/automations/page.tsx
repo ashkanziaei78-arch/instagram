@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
+import { PageIntro } from '@/components/PageIntro'
 import { RuleForm, type MediaOption } from '@/components/RuleForm'
 import { unseal } from '@/lib/crypto'
 import { loadDash } from '@/lib/dash'
 import type { RuleRow } from '@/lib/db'
-import { getDict, num } from '@/lib/i18n'
+import { getDict, lp, num } from '@/lib/i18n'
 import { listMedia } from '@/lib/instagram'
 import { addRule, deleteRule, toggleRule } from '../actions'
 
@@ -47,13 +48,14 @@ export default async function Automations({ searchParams }: { searchParams: Prom
 
   return (
     <div className="space-y-4">
+      <PageIntro title={t.app.nav.rules} text={t.app.intro.rules} learn={{ href: lp(lang, '/dashboard/learn/first-reply'), label: t.app.learn.help }} />
       {flash && (
         <p role="status" className={'rounded-2xl px-4 py-3 text-[14px] ' + (sp.rule === 'added' ? 'border border-emerald-400/25 bg-emerald-400/10' : 'border border-magenta/30 bg-magenta/10')}>
           {flash}
         </p>
       )}
       <section className="card p-6">
-        <h1 className="text-[20px] font-bold">{d.rules.title}</h1>
+        <h2 className="text-[18px] font-bold">{d.rules.title}</h2>
         {rules.length > 0 && (
           <ul className="mt-5 grid gap-3 md:grid-cols-2">
             {rules.map((r) => (

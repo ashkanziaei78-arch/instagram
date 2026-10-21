@@ -1,13 +1,18 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { DailyBars, HBars, type DayPoint } from '@/components/Charts'
+import { AiBrief } from '@/components/AiBrief'
+import { DailyBars, HBars } from '@/components/Charts'
+import { PageIntro } from '@/components/PageIntro'
+import { Suggestions } from '@/components/Suggestions'
+import { computeStats, parseFilter } from '@/lib/stats'
+import { buildSuggestions } from '@/lib/suggest'
 import { daysLeft, isActive } from '@/lib/auth'
 import { loadDash } from '@/lib/dash'
 import { igReady, redirectUri } from '@/lib/env'
 import { eventText } from '@/lib/events'
 import { dateLong, dateTime, getDict, lp, money, num } from '@/lib/i18n'
 import { PLANS } from '@/lib/plans'
-import { disconnectAccount } from './actions'
+import { aiBrief, disconnectAccount } from './actions'
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getDict()
@@ -25,20 +30,9 @@ export default async function Overview({ searchParams }: { searchParams: Promise
     .find((k) => d.flash[k])
   const flashOk = !!flashKey && /=ok$|=added$/.test(flashKey)
 
-  const [daily, byKind, topRules, events, [counts], [crm], [ruleCount]] = await Promise.all([
-    sql<DayPoint[]>`
-      select to_char(g.d, 'YYYY-MM-DD') as day, count(e.id)::int as count
-      from generate_series(current_date - 29, current_date, interval '1 day') as g(d)
-      left join dx_events e on e.user_id = ${user.id} and e.ok
-        and e.kind not in ('skip', 'moderation', 'gate') and e.created_at::date = g.d::date
-      group by g.d order by g.d`,
-    sql<{ kind: string; n: number }[]>`
-      select kind, count(*)::int as n from dx_events
-      where user_id = ${user.id} and ok and kind <> 'skip' and created_at > now() - interval '30 days'
-      group by kind order by n desc`,
-    sql<{ label: string; hits: number }[]>`
-      select coalesce(nullif(name, ''), nullif(left(keywords, 30), ''), trigger) as label, hits
-      from dx_rules where user_id = ${user.id} and hits > 0 order by hits desc limit 5`,
+  const f = parseFilter(sp)
+  const [stats, events, [counts], [crm], [ruleCount], suggestions] = await Promise.all([
+    computeStats(sql, user.id, f),
     sql<{ id: string; kind: string; ok: boolean; detail: string; created_at: Date }[]>`
       select id, kind, ok, detail, created_at from dx_events where user_id = ${user.id} order by id desc limit 12`,
     sql<{ today: number; week: number; any_ok: boolean }[]>`
@@ -50,17 +44,45 @@ export default async function Overview({ searchParams }: { searchParams: Promise
     sql<{ contacts: number; leads: number }[]>`
       select count(*)::int as contacts, count(*) filter (where phone is not null or email is not null)::int as leads
       from dx_contacts c join dx_ig_accounts a on a.id = c.ig_account_id where a.user_id = ${user.id}`,
-    sql<{ n: number }[]>`select count(*)::int as n from dx_rules where user_id = ${user.id}`
+    sql<{ n: number }[]>`select count(*)::int as n from dx_rules where user_id = ${user.id}`,
+    buildSuggestions(sql, user, accounts, lang, t)
   ])
+  const { daily, byKind, topRules } = stats
+  const F = a.filters
+  const B = a.brief
+  const rangeLabel = F.days[String(f.days)]
+  const qs = (patch: Record<string, string | undefined>) => {
+    const p = new URLSearchParams()
+    const cur: Record<string, string | undefined> = { r: String(f.days), k: f.kind, acc: f.accountId, ...patch }
+    for (const [k, v] of Object.entries(cur)) if (v) p.set(k, v)
+    return lp(lang, '/dashboard') + '?' + p.toString()
+  }
+  // خلاصه‌ی متنی، بدون هوش مصنوعی و همیشه
+  const pct = stats.prevTotal ? Math.round(((stats.total - stats.prevTotal) / stats.prevTotal) * 100) : null
+  const brief: string[] = []
+  if (stats.total === 0) brief.push(B.idle)
+  else {
+    brief.push(
+      B.sent(num(lang, stats.total), rangeLabel) +
+        (pct === null ? B.first : Math.abs(pct) < 5 ? B.flat : pct > 0 ? B.up(num(lang, pct)) : B.down(num(lang, -pct)))
+    )
+    const top = byKind.find((k) => !['moderation', 'gate'].includes(k.kind))
+    if (top && !f.kind) brief.push(B.topKind(a.charts.kinds[top.kind] ?? top.kind, num(lang, Math.round((top.n / stats.total) * 100))))
+    if (topRules[0]) brief.push(B.topRule(topRules[0].label, num(lang, topRules[0].n)))
+  }
+  if (stats.newContacts) brief.push(B.newContacts(num(lang, stats.newContacts)))
+  brief.push(stats.leads ? B.leads(num(lang, stats.leads)) : B.noLeads)
 
   const active = isActive(user)
   const left = daysLeft(user)
   const steps = [active, accounts.length > 0, ruleCount.n > 0, !!counts?.any_ok]
   const doneCount = steps.filter(Boolean).length
-  const hasData = daily.some((x) => x.count > 0)
 
   return (
     <div className="space-y-4">
+      <PageIntro title={a.nav.home} text={a.intro.home} learn={{ href: lp(lang, '/dashboard/learn/start'), label: a.learn.help }}>
+        <Suggestions items={suggestions} lang={lang} s={{ button: a.suggest.button, title: a.suggest.title, sub: a.suggest.sub, later: a.suggest.later, empty: a.suggest.empty, tags: a.suggest.tags }} />
+      </PageIntro>
       {flashKey && (
         <p
           role="status"
@@ -151,10 +173,61 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         </section>
       </div>
 
-      {/* نمودارها */}
+      {/* فیلترها — یک ردیف بالای همه‌ی نمودارها، روی همه اعمال می‌شوند */}
+      <section className="flex flex-wrap items-center gap-x-5 gap-y-3 text-[13px]" aria-label={F.range}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-dim">{F.range}</span>
+          {(['7', '30', '90'] as const).map((r) => (
+            <Link key={r} href={qs({ r })} className={'rounded-full px-3 py-1 ' + (String(f.days) === r ? 'bg-haze font-bold text-ink' : 'bg-white/[0.05] text-mist hover:text-haze')}>
+              {F.days[r]}
+            </Link>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-dim">{F.kind}</span>
+          {['', 'comment', 'dm', 'story', 'first_dm', 'form', 'catalog', 'ai'].map((k) => (
+            <Link key={k || 'all'} href={qs({ k: k || undefined })} className={'rounded-full px-3 py-1 ' + ((f.kind ?? '') === k ? 'bg-haze font-bold text-ink' : 'bg-white/[0.05] text-mist hover:text-haze')}>
+              {k ? a.charts.kinds[k] : F.allKinds}
+            </Link>
+          ))}
+        </div>
+        {accounts.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-dim">{F.account}</span>
+            {[{ id: '', username: '' }, ...accounts].map((x) => (
+              <Link key={x.id || 'all'} href={qs({ acc: x.id || undefined })} dir={x.id ? 'ltr' : undefined} className={'rounded-full px-3 py-1 ' + ((f.accountId ?? '') === x.id ? 'bg-haze font-bold text-ink' : 'bg-white/[0.05] text-mist hover:text-haze')}>
+                {x.id ? '@' + x.username : F.allAccounts}
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* خلاصه */}
+      <section className="card relative overflow-hidden p-6">
+        <div className="pointer-events-none absolute -start-20 -top-20 h-48 w-48 rounded-full bg-violet opacity-20 blur-3xl" aria-hidden />
+        <h2 className="text-[16px] font-bold">{B.title} · {rangeLabel}</h2>
+        <ul className="mt-3 space-y-1.5 text-[14px] leading-7 text-mist">
+          {brief.map((line) => (
+            <li key={line} className="flex gap-2">
+              <span className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-tangerine" />
+              {line}
+            </li>
+          ))}
+        </ul>
+        <AiBrief
+          action={aiBrief}
+          filter={{ r: String(f.days), acc: f.accountId ?? '', k: f.kind ?? '' }}
+          s={{ aiTitle: B.aiTitle, aiButton: B.aiButton, aiHint: B.aiHint, aiError: B.aiError, writing: B.writing }}
+        />
+      </section>
+
       <section className="card p-6">
-        <h2 className="mb-4 text-[16px] font-bold">{a.charts.daily}</h2>
-        {hasData ? (
+        <h2 className="mb-4 text-[16px] font-bold">
+          {F.daily(rangeLabel)}
+          {f.kind && <span className="text-mist"> · {a.charts.kinds[f.kind]}</span>}
+        </h2>
+        {daily.some((x) => x.count > 0) ? (
           <DailyBars data={daily} lang={lang} tableLabel={a.charts.table} dayCol={a.charts.day} countCol={a.charts.count} />
         ) : (
           <p className="py-8 text-center text-[14px] text-dim">{a.charts.dailyEmpty}</p>
@@ -169,10 +242,11 @@ export default async function Overview({ searchParams }: { searchParams: Promise
           </section>
           <section className="card p-6">
             <h2 className="mb-4 text-[16px] font-bold">{a.charts.topRules}</h2>
-            <HBars
-              lang={lang}
-              items={topRules.map((r) => ({ label: d.rules.trigger[r.label] ?? a.rule.triggers[r.label] ?? r.label, value: r.hits }))}
-            />
+            {topRules.length ? (
+              <HBars lang={lang} items={topRules.map((r) => ({ label: a.rule.triggers[r.label] ?? r.label, value: r.n }))} />
+            ) : (
+              <p className="text-[13px] text-dim">—</p>
+            )}
           </section>
         </div>
       )}

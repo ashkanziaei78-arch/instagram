@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { PageIntro } from '@/components/PageIntro'
 import Link from 'next/link'
 import { AccountPicker } from '@/components/AccountPicker'
 import { Giveaway } from '@/components/Giveaway'
@@ -36,8 +37,8 @@ export default async function Tools({ searchParams }: { searchParams: Promise<Re
 
   return (
     <div className="space-y-4">
+      <PageIntro title={x.title} text={t.app.intro.tools} learn={{ href: lp(lang, '/dashboard/learn/giveaway'), label: t.app.learn.help }} />
       <AccountPicker accounts={accounts} current={acc.id} base={lp(lang, '/dashboard/tools')} label={t.app.account} />
-      <h1 className="text-[20px] font-bold">{x.title}</h1>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card p-6">

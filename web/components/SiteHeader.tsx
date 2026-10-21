@@ -13,7 +13,7 @@ export function SiteHeader({ lang, t, path = '/' }: { lang: Lang; t: Dict; path?
         <Logo href={home} />
         <nav className="hidden items-center gap-6 text-[14px] text-mist lg:flex">
           <a href={anchor('how')} className="hover:text-haze">{t.nav.how}</a>
-          <a href={anchor('templates')} className="hover:text-haze">{t.nav.templates}</a>
+          <a href={anchor('features')} className="hover:text-haze">{t.nav.templates}</a>
           <a href={anchor('safety')} className="hover:text-haze">{t.nav.safety}</a>
           <a href={anchor('pricing')} className="hover:text-haze">{t.nav.pricing}</a>
           <a href={anchor('faq')} className="hover:text-haze">{t.nav.faq}</a>

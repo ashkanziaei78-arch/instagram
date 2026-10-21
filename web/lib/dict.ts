@@ -3,6 +3,8 @@
  * TypeScript جاافتادن هر کلید را خطا می‌گیرد.
  */
 
+import { appEn, appFa } from './dict-app'
+
 const fa = {
   meta: {
     title: 'دایرکتینو — جواب خودکار کامنت و دایرکت اینستاگرام',
@@ -11,7 +13,7 @@ const fa = {
   },
   nav: {
     how: 'چطور کار می‌کند',
-    templates: 'قالب‌ها',
+    templates: 'امکانات',
     safety: 'امنیت پیج',
     pricing: 'قیمت‌ها',
     faq: 'سوال‌ها',
@@ -74,6 +76,20 @@ const fa = {
         also: 'هر کسی پیج شما را در استوری‌اش منشن کند هم پیام تشکر می‌گیرد'
       }
     ]
+  },
+  features: {
+    title: 'همه‌چیز در یک پنل',
+    sub: 'هرچه برای فروش از دایرکت لازم دارید — بدون نصب چند ابزار جدا.',
+    items: [
+      ['جواب کامنت و دایرکت', 'کلیدواژه، پست خاص، چند نسخه‌ی متن تا تکراری نشود، و دکمه‌ی لینک.'],
+      ['اول فالو کن', 'لینک فقط به کسی می‌رسد که پیج را فالو کرده؛ بقیه پیام «اول فالو کن» می‌گیرند.'],
+      ['فرم و جمع‌آوری شماره', 'بعد از جواب، نام، شماره یا ایمیل مشتری را می‌پرسد و ذخیره می‌کند.'],
+      ['ویترین محصولات', 'محصولات به‌صورت کارت‌های عکس‌دار با دکمه‌ی خرید در دایرکت.'],
+      ['مخاطبان و برچسب', 'همه‌ی کامنت‌گذارها و پیام‌دهنده‌ها با برچسب، جستجو و خروجی اکسل.'],
+      ['جواب هوشمند', 'هوش مصنوعی (ChatGPT، Gemini، Grok…) وقتی هیچ جوابی جور نشد.'],
+      ['قرعه‌کشی و فیلتر کامنت', 'انتخاب برنده از کامنت‌ها و مخفی کردن کامنت‌های اسپم.'],
+      ['آمار و نمودار', 'پیام‌های هر روز، منبع پیام‌ها و پرکارترین جواب‌ها.']
+    ] as [string, string][]
   },
   templates: {
     title: 'از یک قالب شروع کنید',
@@ -335,7 +351,8 @@ const fa = {
     error: 'اینستاگرام اتصال را نپذیرفت. پیج باید حرفه‌ای (Business یا Creator) باشد. در اپ دوباره امتحان کنید.'
   },
   notFound: { title: 'این صفحه پیدا نشد', home: 'صفحه‌ی اصلی' },
-  legal: { updated: 'آخرین به‌روزرسانی:', date: 'آبان ۱۴۰۵' }
+  legal: { updated: 'آخرین به‌روزرسانی:', date: 'آبان ۱۴۰۵' },
+  app: appFa
 }
 
 export type Dict = typeof fa
@@ -348,7 +365,7 @@ const en: Dict = {
   },
   nav: {
     how: 'How it works',
-    templates: 'Templates',
+    templates: 'Features',
     safety: 'Account safety',
     pricing: 'Pricing',
     faq: 'FAQ',
@@ -410,6 +427,20 @@ const en: Dict = {
         rule: 'If someone replies to or mentions your story → send a discount code',
         also: 'Anyone who mentions you in their story gets a thank-you message too'
       }
+    ]
+  },
+  features: {
+    title: 'Everything in one dashboard',
+    sub: 'All you need to sell through DMs — without stitching together several tools.',
+    items: [
+      ['Comment & DM replies', 'Keywords, specific posts, text variations so it never feels repetitive, and link buttons.'],
+      ['Follow to unlock', 'The link only goes to people who follow you; everyone else gets a “follow first” message.'],
+      ['Forms & lead capture', 'After replying, ask for a name, phone or email and save it automatically.'],
+      ['Product showcase', 'Your products as image cards with buy buttons, right inside DMs.'],
+      ['Contacts & tags', 'Everyone who comments or messages, with tags, search and CSV export.'],
+      ['Smart AI replies', 'AI (ChatGPT, Gemini, Grok…) answers when no auto-reply matches.'],
+      ['Giveaways & comment filter', 'Draw winners from comments and hide spam comments automatically.'],
+      ['Analytics', 'Messages per day, where they came from and your busiest replies.']
     ]
   },
   templates: {
@@ -672,7 +703,8 @@ const en: Dict = {
     error: 'Instagram rejected the connection. The account must be Business or Creator. Try again from the app.'
   },
   notFound: { title: 'Page not found', home: 'Home' },
-  legal: { updated: 'Last updated:', date: 'October 2026' }
+  legal: { updated: 'Last updated:', date: 'October 2026' },
+  app: appEn
 }
 
 export const dict: Record<'fa' | 'en', Dict> = { fa, en }

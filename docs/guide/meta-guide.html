@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>راهنمای رسمی کردن دایرکتینو</title>
+<style>
+  @font-face { font-family: Dana; src: url('../../web/fonts/DanaFaNum-Light.ttf'); font-weight: 300; }
+  @font-face { font-family: Dana; src: url('../../web/fonts/DanaFaNum-Regular.ttf'); font-weight: 400; }
+  @font-face { font-family: Dana; src: url('../../web/fonts/DanaFaNum-Bold.ttf'); font-weight: 700; }
+  :root { --ink:#1b1430; --mute:#5d5675; --line:#e6e1f2; --violet:#5b2ef0; --mag:#e1306c; --tan:#fd8d32; --soft:#f7f4fc; }
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Dana, Tahoma, sans-serif; color: var(--ink); font-size: 11.2pt; line-height: 1.95; margin: 0; }
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: space-between; page-break-after: always; }
+  .cover .band { height: 6px; background: linear-gradient(90deg, #fcc730, #fd8d32, #e1306c, #5b2ef0); border-radius: 3px; }
+  .cover img { width: 120px; }
+  .cover h1 { font-size: 30pt; line-height: 1.4; margin: 18px 0 8px; }
+  .cover p { color: var(--mute); font-size: 13pt; margin: 0; }
+  .cover .who { font-size: 10.5pt; color: var(--mute); }
+  h2 { font-size: 17pt; margin: 0 0 6px; padding-top: 4px; page-break-after: avoid; }
+  h2 .n { display: inline-block; min-width: 34px; height: 34px; line-height: 34px; text-align: center; border-radius: 10px; background: var(--ink); color: #fff; font-size: 13pt; margin-left: 10px; }
+  h3 { font-size: 12.5pt; margin: 18px 0 4px; page-break-after: avoid; }
+  section { page-break-before: always; }
+  section.first { page-break-before: auto; }
+  .lead { color: var(--mute); margin: 0 0 14px; }
+  ol, ul { padding-right: 22px; margin: 6px 0; }
+  li { margin: 3px 0; }
+  .box { border: 1px solid var(--line); background: var(--soft); border-radius: 12px; padding: 12px 16px; margin: 12px 0; page-break-inside: avoid; }
+  .warn { border-color: #f5c2d2; background: #fff4f7; }
+  .warn b:first-child { color: var(--mag); }
+  .ok { border-color: #cfe9da; background: #f3fbf6; }
+  .tip b:first-child { color: var(--violet); }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10.2pt; page-break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: right; vertical-align: top; }
+  th { background: var(--soft); font-weight: 700; }
+  code, .ltr { direction: ltr; unicode-bidi: embed; font-family: Consolas, monospace; font-size: 9.6pt; background: #f1edf9; padding: 1px 6px; border-radius: 5px; }
+  .path { direction: rtl; background: #f1edf9; border-radius: 8px; padding: 2px 8px; font-weight: 700; font-size: 10.2pt; }
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps > li { counter-increment: s; position: relative; padding: 0 40px 0 0; margin: 10px 0; }
+  .steps > li::before { content: counter(s); position: absolute; right: 0; top: 2px; width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, var(--violet), var(--mag)); color: #fff; font-weight: 700; font-size: 10.5pt; line-height: 26px; text-align: center; }
+  .check { list-style: none; padding: 0; }
+  .check li::before { content: "☐"; margin-left: 8px; color: var(--violet); }
+  .map { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
+  .map div { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; }
+  .map b { display: block; font-size: 10.5pt; }
+  .map span { color: var(--mute); font-size: 9.6pt; line-height: 1.7; display: block; }
+  .small { font-size: 9.6pt; color: var(--mute); }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="band"></div>
+  <div>
+    <img src="../../web/public/brand/mark.png" alt="">
+    <h1>راهنمای قدم‌به‌قدم<br>رسمی کردن دایرکتینو در متا</h1>
+    <p>از ثبت کسب‌وکار بیرون از ایران تا تأیید اپ در متا — به زبان ساده، برای کسی که فنی نیست</p>
+  </div>
+  <div class="who">نسخه‌ی آبان ۱۴۰۵ · این راهنما مشاوره‌ی حقوقی نیست؛ برای تصمیم‌های قانونی با وکیل مشورت کنید.</div>
+</div>
+
+<section class="first">
+  <h2><span class="n">۰</span>کل ماجرا در یک صفحه</h2>
+  <p class="lead">برای اینکه هر پیجی بتواند بدون محدودیت به دایرکتینو وصل شود (مثل اینزی و رقبا)، متا باید دو چیز را تأیید کند: <b>اینکه شما یک کسب‌وکار واقعی هستید</b> و <b>اینکه اپ شما درست و امن کار می‌کند</b>.</p>
+  <div class="map">
+    <div><b>۱. کسب‌وکار واقعی</b><span>ثبت شرکت در کشوری که متا پشتیبانی می‌کند</span></div>
+    <div><b>۲. نشانی و تلفن</b><span>آدرس، تلفن و حساب بانکی به نام همان شرکت</span></div>
+    <div><b>۳. سایت و ایمیل رسمی</b><span>دامنه‌ی اختصاصی و ایمیل روی همان دامنه</span></div>
+    <div><b>۴. پروفایل بیزنس متا</b><span>ساخت Business Portfolio و ثبت اطلاعات شرکت</span></div>
+    <div><b>۵. تأیید هویت</b><span>Business Verification با مدارک شرکت</span></div>
+    <div><b>۶. بررسی اپ</b><span>App Review با ویدیو و متن آماده، بعد Live کردن اپ</span></div>
+  </div>
+  <table>
+    <tr><th>مرحله</th><th>چه کسی انجامش می‌دهد</th><th>زمان تقریبی</th></tr>
+    <tr><td>ثبت شرکت و حساب بانکی</td><td>شما (با کمک شرکت ثبت یا وکیل)</td><td>۱ تا ۸ هفته، بسته به کشور</td></tr>
+    <tr><td>دامنه، ایمیل، سایت</td><td>شما + من (فنی)</td><td>۱ روز</td></tr>
+    <tr><td>Business Portfolio و Verification</td><td>شما</td><td>۱ ساعت کار + ۲ تا ۱۴ روز انتظار</td></tr>
+    <tr><td>تنظیمات اپ و ویدیو</td><td>شما با راهنمای همین فایل (متن‌ها آماده است)</td><td>۲ تا ۳ ساعت</td></tr>
+    <tr><td>App Review</td><td>متا</td><td>معمولاً ۱ تا ۲ هفته</td></tr>
+  </table>
+  <div class="box tip"><b>نکته:</b> سایت، اپ، صفحه‌های حریم خصوصی و متن‌های انگلیسی همه آماده است. کار اصلی شما مرحله‌های ۱ تا ۵ است که فقط خودتان می‌توانید انجام دهید.</div>
+</section>
+
+<section>
+  <h2><span class="n">۱</span>قبل از شروع: یک حقیقت مهم</h2>
+  <p class="lead">این بخش را حتماً بخوانید؛ بیشترین ضررها از نادیده گرفتن همین‌جاست.</p>
+  <div class="box warn"><b>تحریم‌ها:</b> متا یک شرکت آمریکایی است و طبق قوانین تحریم، کسب‌وکاری که در ایران است یا مالک ایرانیِ ساکن ایران دارد را تأیید نمی‌کند. سیستم متا آدرس، تلفن، IP، مدارک و حساب بانکی را بررسی می‌کند.</div>
+  <h3>پس چه چیزی قانونی و پایدار است؟</h3>
+  <ul>
+    <li>کسب‌وکار <b>واقعاً</b> بیرون از ایران باشد: یعنی شما (یا شریکتان) واقعاً در آن کشور اقامت و فعالیت دارید.</li>
+    <li>یا با یک <b>شریک واقعی</b> که بیرون از ایران زندگی می‌کند کار کنید و او مالک و مدیر رسمی حساب‌های متا باشد — با یک قرارداد کتبی بین شما.</li>
+  </ul>
+  <h3>کارهایی که هرگز نباید کرد</h3>
+  <ul>
+    <li>مدارک، قبض یا آدرس جعلی. متا این‌ها را تشخیص می‌دهد و <b>همه‌ی حساب‌ها را برای همیشه می‌بندد</b> — حتی پیج‌های شخصی.</li>
+    <li>استفاده از اسم یا مدارک کسی که در جریان نیست.</li>
+    <li>آدرس مجازی (Virtual office) بدون فعالیت واقعی، اگر قوانین آن کشور یا متا قبولش نکند.</li>
+  </ul>
+  <div class="box"><b>یک سؤال دیگر برای وکیل:</b> اگر شرکت خارجی شما از مشتری‌های داخل ایران پول بگیرد (مثلاً با زرین‌پال)، خودش قواعد تحریمی و بانکی جدا دارد. قبل از راه‌اندازی، نحوه‌ی دریافت پول را با وکیلِ آشنا با تحریم‌ها روشن کنید.</div>
+</section>
+
+<section>
+  <h2><span class="n">۲</span>انتخاب کشور و ثبت شرکت</h2>
+  <p class="lead">بهترین کشور، کشوری است که شما واقعاً در آن زندگی می‌کنید یا می‌توانید اقامت بگیرید. این جدول فقط برای آشنایی است؛ قوانین و هزینه‌ها مدام عوض می‌شوند.</p>
+  <table>
+    <tr><th>کشور</th><th>مناسب وقتی که…</th><th>نوع ثبت رایج</th><th>نکته</th></tr>
+    <tr><td>امارات (دبی و مناطق آزاد)</td><td>اقامت امارات دارید یا می‌گیرید</td><td>شرکت منطقه‌ی آزاد (Free Zone)</td><td>با ثبت شرکت معمولاً ویزای اقامت هم می‌دهند؛ حساب بانکی سخت‌گیر است</td></tr>
+    <tr><td>ترکیه</td><td>در ترکیه ساکن هستید</td><td>Şahıs şirketi (شخصی) یا Ltd. Şti.</td><td>نیاز به حسابدار (Mali müşavir) دارد</td></tr>
+    <tr><td>گرجستان</td><td>در گرجستان ساکن هستید</td><td>Individual Entrepreneur</td><td>ثبت ساده و سریع</td></tr>
+    <tr><td>کشورهای اروپایی / کانادا</td><td>اقامت قانونی آنجا را دارید</td><td>شرکت محدود یا کسب‌وکار شخصی</td><td>بهترین اعتبار نزد متا</td></tr>
+  </table>
+  <h3>کارهای این مرحله (قدم‌به‌قدم)</h3>
+  <ol class="steps">
+    <li>با یک <b>شرکت ثبت (Company formation agent)</b> یا وکیل در همان کشور صحبت کنید. بگویید: «یک شرکت نرم‌افزاری (Software / SaaS) می‌خواهم.»</li>
+    <li>نام شرکت را انتخاب کنید؛ مثلاً <span class="ltr">Directino Ltd</span> یا <span class="ltr">Directino Technologies FZ-LLC</span>. بهتر است اسم شرکت و اسم اپ یکی باشد.</li>
+    <li>فعالیت شرکت را «توسعه‌ی نرم‌افزار و خدمات آنلاین» ثبت کنید.</li>
+    <li>بعد از ثبت، این مدارک را بگیرید و نگه دارید: <b>گواهی ثبت شرکت</b> (Certificate of Incorporation / Trade License) و مدرکی که نام و نشانی شرکت را دارد.</li>
+    <li>یک <b>حساب بانکی به نام شرکت</b> باز کنید. صورت‌حساب بانکی بعداً به‌عنوان مدرک آدرس به درد می‌خورد.</li>
+    <li>یک <b>شماره تلفن</b> به نام شرکت یا خودتان در همان کشور بگیرید که بتواند پیامک یا تماس متا را جواب بدهد.</li>
+  </ol>
+</section>
+
+<section>
+  <h2><span class="n">۳</span>دامنه، ایمیل رسمی و سایت</h2>
+  <p class="lead">متا می‌خواهد ببیند کسب‌وکار شما سایت واقعی دارد و ایمیلش روی همان سایت است. این بخش ساده است و من کارهای فنی‌اش را انجام می‌دهم.</p>
+  <ol class="steps">
+    <li><b>خرید دامنه:</b> یک دامنه مثل <span class="ltr">directino.com</span> یا <span class="ltr">directino.app</span> از سایت‌هایی مثل Namecheap یا Cloudflare بخرید (به نام شرکت).</li>
+    <li><b>وصل کردن به سایت:</b> دامنه را به من بدهید تا به Vercel وصلش کنم. سایت فعلی <span class="ltr">directino.vercel.app</span> روی دامنه‌ی جدید می‌آید.</li>
+    <li><b>ایمیل رسمی:</b> روی همان دامنه ایمیل بسازید؛ مثلاً <span class="ltr">support@directino.com</span> و <span class="ltr">admin@directino.com</span> (با Google Workspace یا Zoho Mail).</li>
+    <li><b>اطلاعات شرکت روی سایت:</b> نام قانونی شرکت و آدرس باید پایین سایت (فوتر) و در صفحه‌ی حریم خصوصی بیاید. <b>دقیقاً</b> همان چیزی که در مدارک ثبت است. اینها را به من بدهید تا اضافه کنم.</li>
+  </ol>
+  <div class="box tip"><b>چرا مهم است؟</b> اگر نام شرکت در مدارک «Directino Technologies» باشد ولی در سایت «دایرکتینو» بیاید، متا ممکن است رد کند. همه‌جا یک نام و یک آدرس.</div>
+</section>
+
+<section>
+  <h2><span class="n">۴</span>ساخت پروفایل بیزنس متا (Business Portfolio)</h2>
+  <p class="lead">Business Portfolio همان «پرونده‌ی شرکت» شما در متاست. اپ، پیج‌ها و حساب‌های تبلیغاتی همه زیر آن قرار می‌گیرند.</p>
+  <h3>آماده‌سازی حساب فیسبوک شخصی</h3>
+  <ul class="check">
+    <li>یک حساب فیسبوک <b>واقعی</b> با نام واقعی (همان مدیر شرکت). حساب تازه و خالی مشکوک است؛ چند هفته فعال باشد بهتر است.</li>
+    <li>تأیید دومرحله‌ای (Two-factor authentication) را روشن کنید: <span class="path">Settings ← Accounts Center ← Password and security</span></li>
+    <li>با IP و شماره‌ی همان کشوری که شرکت آنجاست وارد شوید.</li>
+  </ul>
+  <h3>ساخت Portfolio</h3>
+  <ol class="steps">
+    <li>به <span class="ltr">business.facebook.com</span> بروید و <b>Create an account</b> را بزنید.</li>
+    <li><b>Business portfolio name:</b> نام قانونی شرکت، دقیقاً مثل گواهی ثبت.</li>
+    <li><b>Your name</b> و <b>Business email:</b> نام خودتان و ایمیل رسمی روی دامنه (مثلاً <span class="ltr">admin@directino.com</span>). ایمیل تأیید را باز کنید و Confirm بزنید.</li>
+    <li>به <span class="path">Settings ← Business info</span> بروید و این‌ها را کامل کنید: Legal business name، Address (همان آدرس مدارک)، Phone، Website (دامنه‌ی جدید).</li>
+    <li>در <span class="path">Settings ← People</span> یک نفر دیگر (مثلاً شریک) را هم Admin کنید تا اگر حساب یکی مشکل پیدا کرد، دسترسی از دست نرود.</li>
+  </ol>
+</section>
+
+<section>
+  <h2><span class="n">۵</span>تأیید هویت کسب‌وکار (Business Verification)</h2>
+  <p class="lead">این همان مرحله‌ای است که بدون آن اپ نمی‌تواند به پیج‌های غریبه سرویس بدهد.</p>
+  <ol class="steps">
+    <li>در business.facebook.com بروید به <span class="path">Settings ← Security Center</span> و <b>Start verification</b> را بزنید. (اگر دکمه نبود، گاهی اول باید اپ را به Portfolio وصل کنید — بخش ۶ — بعد برگردید.)</li>
+    <li><b>Country:</b> کشوری که شرکت آنجا ثبت شده.</li>
+    <li>نام قانونی، آدرس، تلفن و سایت را وارد کنید. اگر متا شرکت را در فهرست خودش پیدا کرد، همان را انتخاب کنید.</li>
+    <li><b>بارگذاری مدارک:</b> یک مدرک برای «نام قانونی» (گواهی ثبت / Trade License) و یک مدرک برای «آدرس یا تلفن» (قبض، صورت‌حساب بانکی یا قرارداد اجاره به نام شرکت). فایل‌ها واضح، رنگی و کامل باشند.</li>
+    <li><b>روش تأیید تماس:</b> یکی را انتخاب کنید: ایمیل روی دامنه (راحت‌ترین)، پیامک یا تماس تلفنی، یا تأیید دامنه. کد را وارد کنید.</li>
+    <li>Submit بزنید و منتظر بمانید. وضعیت در همان Security Center دیده می‌شود (معمولاً ۲ تا ۱۴ روز).</li>
+  </ol>
+  <table>
+    <tr><th>دلیل رایج رد شدن</th><th>راه حل</th></tr>
+    <tr><td>نام روی مدرک با نامی که نوشتید فرق دارد</td><td>حتی Ltd و LLC و نقطه‌ها باید یکی باشد</td></tr>
+    <tr><td>مدرک آدرس قدیمی یا به نام شخص است</td><td>قبض یا صورت‌حساب بانکی جدید (کمتر از ۳ ماه) به نام شرکت</td></tr>
+    <tr><td>سایت نام شرکت را ندارد</td><td>نام و آدرس شرکت را در فوتر سایت بگذارید</td></tr>
+    <tr><td>ایمیل Gmail استفاده شده</td><td>ایمیل روی دامنه‌ی شرکت</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2><span class="n">۶</span>وصل کردن اپ دایرکتینو به شرکت</h2>
+  <p class="lead">اپ متایی که الان دارید (directino) باید زیر همین Portfolio قرار بگیرد.</p>
+  <ol class="steps">
+    <li>به <span class="ltr">developers.facebook.com</span> بروید، بالای صفحه <b>My Apps</b> و اپ <b>directino</b> را باز کنید.</li>
+    <li><span class="path">App settings ← Basic</span>: پایین صفحه بخش <b>Business portfolio</b> را روی Portfolio شرکت بگذارید.</li>
+    <li>در همان صفحه این‌ها را پر کنید (آدرس‌ها را بعد از وصل شدن دامنه، با دامنه‌ی جدید جایگزین کنید):</li>
+  </ol>
+  <table>
+    <tr><th>فیلد</th><th>مقدار</th></tr>
+    <tr><td>App icon</td><td>فایل <span class="ltr">icon-1024.png</span> (در پوشه‌ی سایت آماده است)</td></tr>
+    <tr><td>Privacy Policy URL</td><td><span class="ltr">https://directino.vercel.app/en/privacy</span></td></tr>
+    <tr><td>Terms of Service URL</td><td><span class="ltr">https://directino.vercel.app/en/terms</span></td></tr>
+    <tr><td>User data deletion</td><td><span class="ltr">https://directino.vercel.app/en/data-deletion</span></td></tr>
+    <tr><td>Category</td><td><span class="ltr">Business and pages</span></td></tr>
+    <tr><td>Contact email</td><td>ایمیل پشتیبانی روی دامنه</td></tr>
+  </table>
+  <h3>تنظیمات اینستاگرام اپ</h3>
+  <p><span class="path">Instagram ← API setup with Instagram login</span></p>
+  <ul>
+    <li><b>Business login settings ← OAuth redirect URIs:</b> <span class="ltr">https://directino.vercel.app/oauth/instagram</span></li>
+    <li><b>Webhooks ← Callback URL:</b> <span class="ltr">https://directino.vercel.app/api/webhook/instagram</span> و Verify token همان که در Vercel است؛ بعد تیک <span class="ltr">comments</span> و <span class="ltr">messages</span>.</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="n">۷</span>ضبط ویدیو برای متا (Screencast)</h2>
+  <p class="lead">بازبین متا باید با چشم ببیند اپ هر مجوز را برای چه کاری می‌خواهد. ویدیو ۲ تا ۴ دقیقه، با نسخه‌ی <b>انگلیسی</b> سایت (<span class="ltr">/en</span>). صدا لازم نیست.</p>
+  <div class="box"><b>قبل از ضبط:</b> دو حساب اینستاگرام لازم دارید: پیج اصلی (Business یا Creator) و یک حساب دوم برای کامنت گذاشتن. هر دو را در <span class="path">App roles ← Roles ← Instagram Testers</span> اضافه کنید و دعوت را از <b>مرورگر کامپیوتر</b> در اینستاگرام بپذیرید.</div>
+  <ol class="steps">
+    <li>صفحه‌ی اصلی <span class="ltr">directino.vercel.app/en</span> را نشان دهید.</li>
+    <li>وارد پنل شوید (Log in).</li>
+    <li><b>+ Connect account</b> را بزنید. صفحه‌ی اجازه‌ی اینستاگرام کامل دیده شود، بعد Allow. نام پیج در پنل ظاهر شود.</li>
+    <li>در «New auto-reply» قالب <b>Product link</b> را بزنید، یک لینک بگذارید و <b>Save and activate</b>.</li>
+    <li>با حساب دوم (گوشی دیگر) زیر یک پست پیج اصلی «1» کامنت بگذارید.</li>
+    <li>نشان دهید دایرکت با دکمه‌ی لینک رسید و زیر کامنت هم جواب آمد.</li>
+    <li>قالب <b>Price list</b> را بسازید، از حساب دوم دایرکت «price» بفرستید و جواب را نشان دهید.</li>
+    <li>به پنل برگردید و بخش <b>Recent activity</b> را نشان دهید.</li>
+    <li>در آخر Disconnect و صفحه‌ی <span class="ltr">/en/data-deletion</span> را کوتاه نشان دهید.</li>
+  </ol>
+  <p class="small">برای ضبط از OBS (رایگان) یا ضبط صفحه‌ی خود ویندوز (کلید Win+Alt+R) استفاده کنید.</p>
+</section>
+
+<section>
+  <h2><span class="n">۸</span>ارسال درخواست App Review</h2>
+  <ol class="steps">
+    <li>در developers.facebook.com بروید به <span class="path">App Review ← Permissions and Features</span>.</li>
+    <li>برای این سه مورد <b>Request advanced access</b> را بزنید: <span class="ltr">instagram_business_basic</span>، <span class="ltr">instagram_business_manage_comments</span>، <span class="ltr">instagram_business_manage_messages</span>.</li>
+    <li>برای هر کدام: متن آماده‌ی انگلیسی را از فایل <span class="ltr">docs/META-APP-REVIEW.md</span> کپی کنید و همان ویدیو را آپلود کنید.</li>
+    <li>در بخش <b>Test instructions</b>، دستورالعمل و حساب تست را بگذارید (در همان فایل آماده است): نام کاربری <span class="ltr">metareview</span> و رمزی که به شما دادم.</li>
+    <li>به سؤال‌های <b>Data handling</b> جواب بدهید: داده با کسی به اشتراک گذاشته نمی‌شود، فقط سرویس‌دهنده‌های زیرساخت (Vercel و Neon)، و حذف از داخل پنل.</li>
+    <li><b>Submit for review</b>. جواب معمولاً ۱ تا ۲ هفته طول می‌کشد. اگر رد شد، متا دلیلش را می‌نویسد؛ آن را برای من بفرستید تا درستش کنیم و دوباره بفرستید.</li>
+  </ol>
+  <h2 style="margin-top:22px"><span class="n">۹</span>بعد از تأیید</h2>
+  <ol class="steps">
+    <li>بالای داشبورد اپ، حالت اپ را از Development به <b>Live / Published</b> ببرید.</li>
+    <li>از این لحظه هر پیج Business یا Creator بدون Tester شدن وصل می‌شود.</li>
+    <li>هر وقت دامنه عوض شد، Redirect URI و Webhook و صفحه‌های حقوقی را در متا هم عوض کنید (به من بگویید تا لیست دقیق بدهم).</li>
+  </ol>
+</section>
+
+<section>
+  <h2><span class="n">۱۰</span>واژه‌نامه‌ی ساده</h2>
+  <table>
+    <tr><th>اصطلاح</th><th>یعنی…</th></tr>
+    <tr><td>Business Portfolio</td><td>پرونده‌ی شرکت شما در متا (قبلاً Business Manager)</td></tr>
+    <tr><td>Business Verification</td><td>تأیید اینکه شرکت واقعی است، با مدارک</td></tr>
+    <tr><td>App Review</td><td>بررسی اپ توسط کارمند متا، با ویدیو و توضیح</td></tr>
+    <tr><td>Advanced Access</td><td>اجازه‌ی کار با پیج‌های همه، نه فقط پیج‌های خودتان</td></tr>
+    <tr><td>Instagram Tester</td><td>پیجی که قبل از تأیید هم اجازه دارد وصل شود</td></tr>
+    <tr><td>Redirect URI</td><td>آدرسی که اینستاگرام بعد از «اجازه» کاربر را به آن برمی‌گرداند</td></tr>
+    <tr><td>Webhook</td><td>آدرسی که اینستاگرام کامنت‌ها و دایرکت‌های تازه را به آن خبر می‌دهد</td></tr>
+    <tr><td>Live / Published</td><td>اپ برای عموم باز است</td></tr>
+  </table>
+  <h3>چک‌لیست نهایی</h3>
+  <ul class="check">
+    <li>شرکت ثبت شد و گواهی ثبت دارم</li>
+    <li>حساب بانکی و مدرک آدرس به نام شرکت دارم</li>
+    <li>دامنه و ایمیل رسمی ساخته شد و سایت روی دامنه است</li>
+    <li>نام و آدرس شرکت در فوتر سایت و صفحه‌ی حریم خصوصی هست</li>
+    <li>Business Portfolio ساخته و Verification تأیید شد</li>
+    <li>اپ directino زیر Portfolio است و فیلدهای Basic پر شده</li>
+    <li>Redirect URI و Webhook ثبت شد</li>
+    <li>ویدیو ضبط و App Review ارسال شد</li>
+    <li>بعد از تأیید، اپ Live شد</li>
+  </ul>
+</section>
+
+</body>
+</html>

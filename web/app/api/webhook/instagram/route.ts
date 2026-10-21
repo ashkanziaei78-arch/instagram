@@ -5,6 +5,8 @@ import { safeEqual } from '@/lib/crypto'
 import { handleWebhook } from '@/lib/automation'
 
 export const runtime = 'nodejs'
+// جواب هوش مصنوعی و فرم‌های چندمرحله‌ای بیشتر از ۱۰ ثانیه‌ی پیش‌فرض لازم دارند
+export const maxDuration = 60
 
 /** تأیید آدرس وبهوک در داشبورد متا */
 export function GET(req: NextRequest) {

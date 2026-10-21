@@ -16,6 +16,7 @@ export default async function Home() {
       <main>
         <Hero lang={lang} t={t} />
         <Scenarios t={t} />
+        <Features lang={lang} t={t} />
         <Templates t={t} />
         <NightBand lang={lang} t={t} />
         <section className="wrap py-20 lg:py-28">
@@ -100,10 +101,31 @@ function Scenarios({ t }: { t: Dict }) {
   )
 }
 
+/** امکانات پنل — ترتیب ندارند، پس شماره نمی‌گیرند */
+function Features({ lang, t }: { lang: Lang; t: Dict }) {
+  return (
+    <section id="features" className="scroll-mt-20 border-t border-white/[0.05] py-20 lg:py-28">
+      <div className="wrap">
+        <h2 className="text-[30px] font-bold sm:text-[40px]">{t.features.title}</h2>
+        <p className="mt-4 max-w-2xl text-[16px] font-light leading-8 text-mist">{t.features.sub}</p>
+        <div className="mt-12 grid gap-px overflow-hidden rounded-[28px] border border-white/[0.06] bg-white/[0.06] sm:grid-cols-2 lg:grid-cols-4">
+          {t.features.items.map(([h, b], i) => (
+            <div key={h} className="bg-ink p-6">
+              <span className="block h-1 w-8 rounded-full bg-brand" style={{ opacity: 1 - (i % 4) * 0.15 }} aria-hidden />
+              <h3 className="mt-4 text-[16px] font-bold">{h}</h3>
+              <p className={'mt-2 text-[14px] text-mist ' + (lang === 'fa' ? 'leading-7' : 'leading-6')}>{b}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 /** قالب‌ها به شکل گره‌های یک جریان: محرک ← کار */
 function Templates({ t }: { t: Dict }) {
   return (
-    <section id="templates" className="scroll-mt-20 border-t border-white/[0.05] py-20 lg:py-28">
+    <section id="templates" className="scroll-mt-20 pb-20 lg:pb-28">
       <div className="wrap">
         <h2 className="text-[30px] font-bold sm:text-[40px]">{t.templates.title}</h2>
         <p className="mt-4 max-w-2xl text-[16px] font-light leading-8 text-mist">{t.templates.sub}</p>

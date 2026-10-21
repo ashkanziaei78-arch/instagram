@@ -1,18 +1,23 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { AuthForm } from '@/components/AuthForm'
 import { AuthShell } from '@/components/AuthShell'
-import { redirect } from 'next/navigation'
-import { currentUser } from '@/lib/auth'
 import { loginAction } from '@/lib/actions-auth'
+import { currentUser } from '@/lib/auth'
+import { getDict, localize, lp } from '@/lib/i18n'
 
-export const metadata: Metadata = { title: 'ورود' }
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getDict()
+  return { title: t.auth.loginTitle }
+}
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
-  const { next } = await searchParams
-  if (await currentUser().catch(() => null)) redirect(next ?? '/dashboard')
+export default async function Page({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const { lang, t } = await getDict()
+  const next = localize(lang, (await searchParams).next ?? '/dashboard')
+  if (await currentUser().catch(() => null)) redirect(next)
   return (
-    <AuthShell title="ورود به پنل" sub="با نام کاربری و رمزی که موقع ثبت‌نام ساختید.">
-      <AuthForm mode="login" action={loginAction} next={next ?? '/dashboard'} />
+    <AuthShell title={t.auth.loginTitle} sub={t.auth.loginSub} lang={lang} t={t} path="/login">
+      <AuthForm mode="login" action={loginAction} next={next} t={t.auth} otherHref={lp(lang, '/signup')} />
     </AuthShell>
   )
 }

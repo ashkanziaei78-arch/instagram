@@ -26,6 +26,8 @@ export async function GET(req: Request) {
     }
   }
   await sql`delete from dx_processed where created_at < now() - interval '7 days'`
+  // همان مدتی که در سیاست حریم خصوصی گفته‌ایم
+  await sql`delete from dx_events where created_at < now() - interval '90 days'`
   await sql`delete from dx_oauth_states where created_at < now() - interval '1 day'`
   await sql`delete from dx_desktop_claims where created_at < now() - interval '1 day'`
   return Response.json({ refreshed: ok, checked: rows.length })

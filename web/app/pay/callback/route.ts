@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { getLang, localize } from '@/lib/i18n'
 import type { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { planById } from '@/lib/plans'
@@ -6,21 +7,24 @@ import { verifyPayment } from '@/lib/zarinpal'
 
 export async function GET(req: NextRequest) {
   const authority = req.nextUrl.searchParams.get('Authority') ?? ''
+  // زبان از کوکی؛ این مسیرها از بیرون (اینستاگرام، بانک) صدا زده می‌شوند
+  const lang = await getLang()
+  const L = (path: string) => localize(lang, path)
   const status = req.nextUrl.searchParams.get('Status')
   const sql = await db()
   const [pay] = await sql<{ id: string; user_id: string; plan: string; amount: number; status: string }[]>`
     select id, user_id, plan, amount, status from dx_payments where authority = ${authority}`
-  if (!pay) redirect('/dashboard?pay=unknown')
-  if (pay.status === 'paid') redirect('/dashboard?pay=ok')
+  if (!pay) redirect(L('/dashboard?pay=unknown'))
+  if (pay.status === 'paid') redirect(L('/dashboard?pay=ok'))
   if (status !== 'OK') {
     await sql`update dx_payments set status = 'failed' where id = ${pay.id} and status = 'pending'`
-    redirect('/dashboard?pay=cancelled')
+    redirect(L('/dashboard?pay=cancelled'))
   }
 
   const v = await verifyPayment(pay.amount, authority)
   if (!v.ok) {
     await sql`update dx_payments set status = 'failed' where id = ${pay.id} and status = 'pending'`
-    redirect('/dashboard?pay=failed')
+    redirect(L('/dashboard?pay=failed'))
   }
 
   const days = planById(pay.plan)?.days ?? 30
@@ -33,5 +37,5 @@ export async function GET(req: NextRequest) {
         where id = ${pay.user_id}`
     }
   })
-  redirect('/dashboard?pay=ok')
+  redirect(L('/dashboard?pay=ok'))
 }

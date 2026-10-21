@@ -1,151 +1,189 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { LangSwitch } from '@/components/LangSwitch'
 import { Logo } from '@/components/Logo'
+import { RuleForm } from '@/components/RuleForm'
 import { daysLeft, isActive, requireUser } from '@/lib/auth'
 import { logoutAction } from '@/lib/actions-auth'
 import { db, type RuleRow } from '@/lib/db'
 import { env, igReady, redirectUri } from '@/lib/env'
-import { PLANS, faNum, toman } from '@/lib/plans'
+import { dateLong, dateTime, getDict, lp, money, num } from '@/lib/i18n'
+import { PLANS } from '@/lib/plans'
+import { eventText } from '@/lib/events'
 import { addRule, deleteMyAccount, deleteRule, disconnectAccount, toggleRule } from './actions'
 
-export const metadata: Metadata = { title: 'پنل من' }
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getDict()
+  return { title: t.dash.title }
+}
 export const dynamic = 'force-dynamic'
-
-const FLASH: Record<string, [string, 'ok' | 'bad']> = {
-  'ig=ok': ['پیج وصل شد. حالا یک جواب خودکار بسازید.', 'ok'],
-  'ig=denied': ['اتصال لغو شد؛ در صفحه‌ی اینستاگرام «اجازه» زده نشد.', 'bad'],
-  'ig=error': ['اینستاگرام اتصال را نپذیرفت. پیج باید حرفه‌ای (Business یا Creator) باشد؛ دوباره امتحان کنید.', 'bad'],
-  'ig=expired': ['زمان اتصال تمام شد؛ دوباره «اتصال پیج» را بزنید.', 'bad'],
-  'ig=setup': ['اتصال اینستاگرام هنوز روی سرور تنظیم نشده. با پشتیبانی تماس بگیرید.', 'bad'],
-  'pay=ok': ['پرداخت موفق بود و اشتراک تمدید شد.', 'ok'],
-  'pay=cancelled': ['پرداخت لغو شد. مبلغی کم نشده؛ اگر کم شده باشد تا ۷۲ ساعت برمی‌گردد.', 'bad'],
-  'pay=failed': ['بانک پرداخت را تأیید نکرد. اگر مبلغ کم شده، تا ۷۲ ساعت برمی‌گردد.', 'bad'],
-  'pay=gateway': ['درگاه پرداخت در دسترس نیست؛ چند دقیقه بعد امتحان کنید.', 'bad'],
-  'rule=added': ['جواب خودکار ذخیره شد و از همین حالا فعال است.', 'ok'],
-  'rule=invalid': ['جواب خودکار ذخیره نشد: پیج و متن پیام لازم است.', 'bad'],
-  'del=confirm': ['برای حذف حساب، نام کاربری‌تان را دقیق بنویسید.', 'bad']
-}
-
-const TRIGGER_LABEL: Record<RuleRow['trigger'], string> = {
-  comment: 'کامنت زیر پست',
-  dm: 'پیام در دایرکت',
-  story: 'جواب یا منشن استوری'
-}
-
-const faDate = (d: Date) => new Intl.DateTimeFormat('fa-IR-u-ca-persian', { dateStyle: 'medium' }).format(d)
-const faTime = (d: Date) =>
-  new Intl.DateTimeFormat('fa-IR-u-ca-persian', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' }).format(d)
 
 export default async function Dashboard({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const user = await requireUser()
+  const { lang, t } = await getDict()
+  const d = t.dash
   const sp = await searchParams
-  const flash = Object.entries(sp)
-    .map(([k, v]) => FLASH[k + '=' + v])
-    .find(Boolean)
+  const flashKey = Object.entries(sp)
+    .map(([k, v]) => k + '=' + v)
+    .find((k) => d.flash[k])
+  const flashOk = !!flashKey && /=ok$|=added$/.test(flashKey)
 
   const sql = await db()
-  const [accounts, rules, events] = await Promise.all([
+  const [accounts, rules, events, [counts]] = await Promise.all([
     sql<{ id: string; username: string; token_expires_at: Date | null; webhook_ok: boolean }[]>`
       select id, username, token_expires_at, webhook_ok from dx_ig_accounts where user_id = ${user.id} order by id`,
     sql<(RuleRow & { username: string })[]>`
       select r.*, a.username from dx_rules r join dx_ig_accounts a on a.id = r.ig_account_id
       where r.user_id = ${user.id} order by r.id desc`,
     sql<{ id: string; kind: string; ok: boolean; detail: string; created_at: Date }[]>`
-      select id, kind, ok, detail, created_at from dx_events where user_id = ${user.id} order by id desc limit 30`
+      select id, kind, ok, detail, created_at from dx_events where user_id = ${user.id} order by id desc limit 30`,
+    sql<{ today: number; week: number; any_ok: boolean }[]>`
+      select
+        count(*) filter (where ok and created_at > now() - interval '1 day')::int as today,
+        count(*) filter (where ok and created_at > now() - interval '7 days')::int as week,
+        bool_or(ok) as any_ok
+      from dx_events where user_id = ${user.id} and kind <> 'skip'`
   ])
 
   const active = isActive(user)
   const left = daysLeft(user)
+  const activeRules = rules.filter((r) => r.enabled).length
+
+  // چک‌لیست شروع (ایده از ManyChat): تا وقتی کامل نشده بالای صفحه می‌ماند
+  const steps = [active, accounts.length > 0, rules.length > 0, !!counts?.any_ok]
+  const doneCount = steps.filter(Boolean).length
 
   return (
     <div className="min-h-dvh pb-24">
       <header className="sticky top-0 z-30 border-b border-white/[0.05] bg-ink/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
-          <Logo href="/dashboard" />
-          <div className="flex items-center gap-3 text-[13px]">
-            {user.is_admin && <Link href="/admin" className="text-mist hover:text-haze">مدیریت</Link>}
-            <span dir="ltr" className="text-mist">{user.username}</span>
+        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-2 px-4">
+          <Logo href={lp(lang, '/dashboard')} />
+          <div className="flex items-center gap-2 text-[13px]">
+            {user.is_admin && <Link href="/admin" className="text-mist hover:text-haze">{d.admin}</Link>}
+            <LangSwitch lang={lang} path="/dashboard" label={t.nav.switchLangShort} />
+            <span dir="ltr" className="hidden text-mist sm:inline">{user.username}</span>
             <form action={logoutAction}>
-              <button className="btn btn-ghost btn-sm">خروج</button>
+              <button className="btn btn-ghost btn-sm">{d.logout}</button>
             </form>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl space-y-4 px-4 pt-6">
-        {flash && (
+        {flashKey && (
           <p
             role="status"
             className={
               'rounded-2xl px-4 py-3 text-[14px] leading-7 ' +
-              (flash[1] === 'ok' ? 'border border-emerald-400/25 bg-emerald-400/10' : 'border border-magenta/30 bg-magenta/10')
+              (flashOk ? 'border border-emerald-400/25 bg-emerald-400/10' : 'border border-magenta/30 bg-magenta/10')
             }
           >
-            {flash[0]}
+            {d.flash[flashKey]}
           </p>
+        )}
+
+        {doneCount < steps.length && (
+          <section className="card p-6">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[18px] font-bold">{d.start.title}</h2>
+              <span className="text-[13px] text-mist">
+                {num(lang, doneCount)} {d.start.done} {num(lang, steps.length)}
+              </span>
+            </div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+              <div className="h-full rounded-full bg-brand transition-all" style={{ width: (doneCount / steps.length) * 100 + '%' }} />
+            </div>
+            <ol className="mt-5 space-y-3">
+              {d.start.steps.map((label, i) => (
+                <li key={label} className="flex items-start gap-3 text-[14px]">
+                  <span
+                    className={
+                      'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ' +
+                      (steps[i] ? 'bg-emerald-400/20 text-emerald-300' : 'border border-white/15 text-dim')
+                    }
+                  >
+                    {steps[i] ? '✓' : num(lang, i + 1)}
+                  </span>
+                  <span className={steps[i] ? 'text-dim line-through decoration-white/20' : 'text-haze'}>{label}</span>
+                </li>
+              ))}
+            </ol>
+            {steps[2] && !steps[3] && <p className="mt-4 text-[13px] leading-6 text-mist">{d.start.testHint}</p>}
+          </section>
         )}
 
         {/* اشتراک */}
         <section className="card relative overflow-hidden p-6">
-          {active && <div className="pointer-events-none absolute -left-16 -top-16 h-48 w-48 rounded-full bg-brand opacity-25 blur-3xl" aria-hidden />}
-          <p className="text-[13px] text-mist">اشتراک</p>
+          {active && <div className="pointer-events-none absolute -end-16 -top-16 h-48 w-48 rounded-full bg-brand opacity-25 blur-3xl" aria-hidden />}
+          <p className="text-[13px] text-mist">{d.sub.label}</p>
           {active ? (
             <>
               <p className="mt-2 text-[44px] font-bold leading-none">
-                {faNum(left)} <span className="text-[18px] font-normal text-mist">روز مانده</span>
+                {num(lang, left)} <span className="text-[18px] font-normal text-mist">{d.sub.left}</span>
               </p>
-              <p className="mt-3 text-[14px] text-mist">تا {faDate(new Date(user.sub_until!))}</p>
+              <p className="mt-3 text-[14px] text-mist">
+                {d.sub.until} {dateLong(lang, new Date(user.sub_until!))}
+              </p>
               <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
                 <div className="h-full rounded-full bg-brand" style={{ width: Math.min(100, (left / 90) * 100) + '%' }} />
               </div>
             </>
           ) : (
             <>
-              <p className="mt-2 text-[24px] font-bold">اشتراک فعال نیست</p>
-              <p className="mt-2 text-[14px] leading-7 text-mist">
-                تا وقتی اشتراک فعال نباشد، جواب‌های خودکار ارسال نمی‌شوند. قانون‌ها و پیج‌ها سر جایشان می‌مانند.
-              </p>
+              <p className="mt-2 text-[24px] font-bold">{d.sub.inactive}</p>
+              <p className="mt-2 text-[14px] leading-7 text-mist">{d.sub.inactiveBody}</p>
             </>
           )}
           <div className="mt-6 flex flex-wrap gap-2">
-            {PLANS.filter((p) => p.enabled).map((p) => (
+            {PLANS.filter((p) => p.enabled && p.price).map((p) => (
               <Link key={p.id} href={'/checkout/' + p.id} className={'btn btn-sm ' + (p.id === 'm3' ? 'btn-brand' : 'btn-ghost')}>
-                {active ? 'تمدید' : 'خرید'} {p.title} — {toman(p.price!)}
+                {active ? d.sub.renew : d.sub.buy} {t.pricing.plans[p.id]} — {money(lang, p.price!)}
               </Link>
             ))}
           </div>
         </section>
 
+        {/* آمار */}
+        <section className="grid grid-cols-3 gap-3">
+          {[
+            [d.stats.today, counts?.today ?? 0],
+            [d.stats.week, counts?.week ?? 0],
+            [d.stats.rules, activeRules]
+          ].map(([label, value]) => (
+            <div key={label as string} className="card p-4">
+              <p className="text-[12px] leading-5 text-mist">{label}</p>
+              <p className="mt-1 text-[26px] font-bold">{num(lang, value as number)}</p>
+            </div>
+          ))}
+        </section>
+
         {/* پیج‌ها */}
         <section className="card p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-[18px] font-bold">پیج‌های اینستاگرام</h2>
-            <a href="/api/instagram/connect" className="btn btn-brand btn-sm">+ اتصال پیج</a>
+            <h2 className="text-[18px] font-bold">{d.pages.title}</h2>
+            <a href="/api/instagram/connect" className="btn btn-brand btn-sm">{d.pages.connect}</a>
           </div>
           {!igReady() && (
             <p className="mt-4 rounded-2xl bg-white/[0.04] p-3 text-[13px] leading-6 text-mist">
-              مدیر سایت: IG_APP_ID و IG_APP_SECRET را تنظیم کنید و این آدرس را در متا به‌عنوان Redirect URI بگذارید:{' '}
-              <code dir="ltr" className="text-haze">{redirectUri()}</code>
+              {d.pages.adminHint} <code dir="ltr" className="text-haze">{redirectUri()}</code>
             </p>
           )}
           {accounts.length === 0 ? (
-            <p className="mt-4 text-[14px] leading-7 text-mist">
-              هنوز پیجی وصل نیست. «اتصال پیج» صفحه‌ی رسمی اینستاگرام را باز می‌کند؛ آنجا وارد شوید و «اجازه» بدهید.
-            </p>
+            <p className="mt-4 text-[14px] leading-7 text-mist">{d.pages.empty}</p>
           ) : (
             <ul className="mt-4 divide-y divide-white/[0.06]">
               {accounts.map((a) => (
                 <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                   <div>
-                    <p dir="ltr" className="text-right font-bold">@{a.username}</p>
+                    <p dir="ltr" className="text-start font-bold">@{a.username}</p>
                     <p className="mt-0.5 text-[12px] text-dim">
-                      {a.webhook_ok ? 'دریافت رویدادها فعال' : 'دریافت رویدادها ثبت نشد — یک بار دوباره وصل کنید'}
-                      {a.token_expires_at && '، اعتبار اتصال تا ' + faDate(new Date(a.token_expires_at))}
+                      {a.webhook_ok ? d.pages.webhookOk : d.pages.webhookBad}
+                      {a.token_expires_at && d.pages.validUntil + dateLong(lang, new Date(a.token_expires_at))}
                     </p>
                   </div>
                   <form action={disconnectAccount}>
                     <input type="hidden" name="id" value={a.id} />
-                    <button className="text-[13px] text-dim hover:text-magenta">قطع اتصال</button>
+                    <button className="text-[13px] text-dim hover:text-magenta">{d.pages.disconnect}</button>
                   </form>
                 </li>
               ))}
@@ -155,104 +193,63 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
         {/* قانون‌ها */}
         <section id="rules" className="card scroll-mt-20 p-6">
-          <h2 className="text-[18px] font-bold">جواب‌های خودکار</h2>
+          <h2 className="text-[18px] font-bold">{d.rules.title}</h2>
           {rules.length > 0 && (
             <ul className="mt-4 space-y-2.5">
               {rules.map((r) => (
                 <li key={r.id} className={'rounded-2xl border border-white/[0.06] bg-ink/50 p-4 ' + (r.enabled ? '' : 'opacity-55')}>
                   <div className="flex flex-wrap items-center gap-2 text-[12px] text-mist">
-                    <span className="chip bg-white/[0.06]">{TRIGGER_LABEL[r.trigger]}</span>
+                    <span className="chip bg-white/[0.06]">{d.rules.trigger[r.trigger]}</span>
                     <span dir="ltr">@{r.username}</span>
-                    <span>{faNum(r.hits)} بار اجرا شده</span>
+                    <span>
+                      {num(lang, r.hits)} {d.rules.times}
+                    </span>
                   </div>
-                  <p className="mt-2.5 text-[14px] leading-7">
-                    <span className="text-mist">اگر نوشت </span>
-                    <b>{r.keywords.trim() || 'هر چیزی'}</b>
-                    <span className="text-mist"> ← </span>
+                  <p className="mt-2.5 whitespace-pre-line text-[14px] leading-7">
+                    <span className="text-mist">{d.rules.ifWrote}</span>
+                    <b>{r.keywords.trim() || d.rules.anything}</b>
+                    <span className="text-mist"> → </span>
                     {r.reply}
                   </p>
-                  {r.button_title && <p className="mt-1 text-[12px] text-dim">دکمه: {r.button_title}</p>}
+                  {r.button_title && (
+                    <p className="mt-1 text-[12px] text-dim">
+                      {d.rules.button}
+                      {r.button_title}
+                    </p>
+                  )}
                   <div className="mt-3 flex gap-4 text-[13px]">
                     <form action={toggleRule}>
                       <input type="hidden" name="id" value={r.id} />
-                      <button className="text-mist hover:text-haze">{r.enabled ? 'خاموش کن' : 'روشن کن'}</button>
+                      <button className="text-mist hover:text-haze">{r.enabled ? d.rules.off : d.rules.on}</button>
                     </form>
                     <form action={deleteRule}>
                       <input type="hidden" name="id" value={r.id} />
-                      <button className="text-dim hover:text-magenta">حذف</button>
+                      <button className="text-dim hover:text-magenta">{d.rules.remove}</button>
                     </form>
                   </div>
                 </li>
               ))}
             </ul>
           )}
-
           {accounts.length === 0 ? (
-            <p className="mt-4 text-[14px] text-mist">اول یک پیج وصل کنید.</p>
+            <p className="mt-4 text-[14px] text-mist">{d.rules.needPage}</p>
           ) : (
-            <form action={addRule} className="mt-6 space-y-4 border-t border-white/[0.06] pt-6">
-              <p className="text-[15px] font-bold">جواب تازه</p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="label" htmlFor="trigger">وقتی کسی…</label>
-                  <select id="trigger" name="trigger" className="input">
-                    <option value="comment">زیر پست کامنت گذاشت</option>
-                    <option value="dm">در دایرکت پیام داد</option>
-                    <option value="story">به استوری جواب داد یا منشن کرد</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="account">پیج</label>
-                  <select id="account" name="account" className="input" dir="ltr">
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>@{a.username}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="label" htmlFor="keywords">و نوشت (با ویرگول جدا کنید؛ خالی = هر چیزی)</label>
-                <input id="keywords" name="keywords" className="input" placeholder="۱، قیمت، لینک" />
-              </div>
-              <div>
-                <label className="label" htmlFor="reply">این پیام به دایرکتش برود</label>
-                <textarea id="reply" name="reply" rows={3} required maxLength={1000} className="input" placeholder="سلام {username} 👋 لینک خرید اینجاست…" />
-                <p className="mt-1.5 text-[12px] text-dim">{'{username}'} با آیدی طرف عوض می‌شود.</p>
-              </div>
-              <details className="rounded-2xl bg-ink/40 p-4">
-                <summary className="cursor-pointer text-[14px] text-mist">دکمه‌ی لینک و جواب زیر کامنت (اختیاری)</summary>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="label" htmlFor="button_title">متن دکمه</label>
-                    <input id="button_title" name="button_title" maxLength={20} className="input" placeholder="دیدن محصول" />
-                  </div>
-                  <div>
-                    <label className="label" htmlFor="button_url">لینک دکمه</label>
-                    <input id="button_url" name="button_url" dir="ltr" className="input text-left" placeholder="https://" />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="label" htmlFor="public_reply">جواب عمومی زیر کامنت (فقط برای کامنت)</label>
-                    <input id="public_reply" name="public_reply" maxLength={300} className="input" placeholder="دایرکتت رو چک کن 💌" />
-                  </div>
-                </div>
-              </details>
-              <button className="btn btn-brand w-full sm:w-auto">ذخیره و فعال‌سازی</button>
-            </form>
+            <RuleForm action={addRule} accounts={accounts.map(({ id, username }) => ({ id, username }))} r={d.rules} tpl={d.tpl} />
           )}
         </section>
 
         {/* گزارش */}
         <section className="card p-6">
-          <h2 className="text-[18px] font-bold">آخرین کارها</h2>
+          <h2 className="text-[18px] font-bold">{d.events.title}</h2>
           {events.length === 0 ? (
-            <p className="mt-3 text-[14px] leading-7 text-mist">هنوز پیامی نرفته. هر دایرکتی که دایرکتینو بفرستد اینجا ثبت می‌شود.</p>
+            <p className="mt-3 text-[14px] leading-7 text-mist">{d.events.empty}</p>
           ) : (
             <ul className="mt-4 space-y-2">
               {events.map((e) => (
                 <li key={e.id} className="flex gap-3 text-[13px] leading-6">
                   <span className={'mt-2 h-1.5 w-1.5 shrink-0 rounded-full ' + (e.ok ? 'bg-emerald-400' : 'bg-magenta')} />
-                  <span className="flex-1 text-mist">{e.detail}</span>
-                  <span className="shrink-0 text-dim">{faTime(new Date(e.created_at))}</span>
+                  <span className="flex-1 text-mist">{eventText(lang, e.kind, e.ok, e.detail)}</span>
+                  <span className="shrink-0 text-dim">{dateTime(lang, new Date(e.created_at))}</span>
                 </li>
               ))}
             </ul>
@@ -261,26 +258,25 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
         {/* نصب */}
         <section className="card p-6">
-          <h2 className="text-[18px] font-bold">روی گوشی و ویندوز</h2>
+          <h2 className="text-[18px] font-bold">{d.install.title}</h2>
           <p className="mt-3 text-[14px] leading-7 text-mist">
-            <b className="text-haze">گوشی:</b> همین صفحه را در کروم (اندروید) یا سافاری (آیفون) باز کنید، منوی اشتراک‌گذاری یا سه‌نقطه
-            ← «افزودن به صفحه‌ی اصلی».
+            <b className="text-haze">{d.install.phone}</b> {d.install.phoneBody}
           </p>
           <p className="mt-3 text-[14px] leading-7 text-mist">
-            <b className="text-haze">ویندوز:</b> صندوق دایرکت، پیام گروهی و جواب هوشمند. با همین نام کاربری وارد شوید.
+            <b className="text-haze">{d.install.win}</b> {d.install.winBody}
           </p>
           {active && env.desktopUrl ? (
-            <a href={env.desktopUrl} className="btn btn-ghost mt-4">دانلود نسخه‌ی ویندوز</a>
+            <a href={env.desktopUrl} className="btn btn-ghost mt-4">{d.install.download}</a>
           ) : (
-            <p className="mt-4 text-[13px] text-dim">{active ? 'لینک دانلود به‌زودی همین‌جا قرار می‌گیرد.' : 'لینک دانلود بعد از خرید اشتراک نمایش داده می‌شود.'}</p>
+            <p className="mt-4 text-[13px] text-dim">{active ? d.install.soon : d.install.afterBuy}</p>
           )}
         </section>
 
         <details id="danger" className="px-2 pt-4 text-[13px] text-dim">
-          <summary className="cursor-pointer">حذف حساب و همه‌ی اطلاعات</summary>
+          <summary className="cursor-pointer">{d.danger.summary}</summary>
           <form action={deleteMyAccount} className="mt-3 flex flex-wrap gap-2">
-            <input name="confirm" dir="ltr" className="input h-10 max-w-[220px]" placeholder={user.username} aria-label="نام کاربری برای تأیید" />
-            <button className="btn btn-sm border border-magenta/40 text-magenta">حذف همیشگی</button>
+            <input name="confirm" dir="ltr" className="input h-10 max-w-[220px]" placeholder={user.username} aria-label={d.danger.confirm} />
+            <button className="btn btn-sm border border-magenta/40 text-magenta">{d.danger.button}</button>
           </form>
         </details>
       </main>

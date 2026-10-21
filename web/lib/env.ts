@@ -9,7 +9,8 @@ export const env = {
   zarinpalSandbox: process.env.ZARINPAL_SANDBOX === '1',
   manualCard: process.env.MANUAL_PAY_CARD ?? '',
   manualContact: process.env.MANUAL_PAY_CONTACT ?? '',
-  desktopUrl: process.env.NEXT_PUBLIC_DESKTOP_URL ?? ''
+  desktopUrl: process.env.NEXT_PUBLIC_DESKTOP_URL ?? '',
+  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? ''
 }
 
 export const igReady = (): boolean => !!(env.igAppId && env.igAppSecret)

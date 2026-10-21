@@ -1,4 +1,5 @@
 import postgres from 'postgres'
+import { hashPassword } from './crypto'
 
 /**
  * Postgres با جدول‌هایی که پیشوند dx_ دارند.
@@ -121,6 +122,24 @@ async function migrate(sql: postgres.Sql): Promise<void> {
       created_at timestamptz not null default now()
     );
   `)
+  await seedReviewer(sql)
+}
+
+/**
+ * حساب تست برای بازبین متا (App Review): از روی REVIEWER_USERNAME و
+ * REVIEWER_PASSWORD ساخته یا به‌روز می‌شود و همیشه دست‌کم ۳۰ روز اشتراک دارد،
+ * تا بازبین بدون پرداخت کل جریان را ببیند.
+ */
+async function seedReviewer(sql: postgres.Sql): Promise<void> {
+  const username = (process.env.REVIEWER_USERNAME ?? '').trim().toLowerCase()
+  const password = process.env.REVIEWER_PASSWORD ?? ''
+  if (!username || password.length < 8) return
+  await sql`
+    insert into dx_users (username, pass_hash, sub_until)
+    values (${username}, ${await hashPassword(password)}, now() + interval '30 days')
+    on conflict (username) do update set
+      pass_hash = excluded.pass_hash,
+      sub_until = greatest(dx_users.sub_until, now() + interval '30 days')`
 }
 
 export interface UserRow {

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import localFont from 'next/font/local'
+import { getDict } from '@/lib/i18n'
 import './globals.css'
 
 const dana = localFont({
@@ -12,21 +13,37 @@ const dana = localFont({
   display: 'swap'
 })
 
-export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
-  title: { default: 'دایرکتینو — جواب خودکار کامنت و دایرکت اینستاگرام', template: '%s | دایرکتینو' },
-  description:
-    'دایرکتینو به کامنت، دایرکت و استوری‌های پیج اینستاگرام شما همان لحظه جواب می‌دهد؛ با API رسمی اینستاگرام و بدون گرفتن رمز پیج.',
-  applicationName: 'دایرکتینو',
-  appleWebApp: { capable: true, title: 'دایرکتینو', statusBarStyle: 'black-translucent' },
-  icons: {
-    icon: [
-      { url: '/brand/favicon-32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/brand/icon-192.png', sizes: '192x192', type: 'image/png' }
-    ],
-    apple: '/brand/apple-touch-icon.png'
-  },
-  openGraph: { images: ['/brand/icon-512.png'], locale: 'fa_IR', siteName: 'دایرکتینو' }
+// دانا ارقام را فارسی می‌کشد؛ نسخه‌ی انگلیسی فونت لاتین جدا لازم دارد
+const bricolage = localFont({
+  src: '../fonts/BricolageGrotesque-Variable.woff2',
+  weight: '200 800',
+  variable: '--font-bricolage',
+  display: 'swap'
+})
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { lang, t } = await getDict()
+  const base = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  return {
+    metadataBase: new URL(base),
+    title: { default: t.meta.title, template: lang === 'fa' ? '%s | دایرکتینو' : '%s | Directino' },
+    description: t.meta.description,
+    applicationName: lang === 'fa' ? 'دایرکتینو' : 'Directino',
+    appleWebApp: { capable: true, title: lang === 'fa' ? 'دایرکتینو' : 'Directino', statusBarStyle: 'black-translucent' },
+    icons: {
+      icon: [
+        { url: '/brand/favicon-32.png', sizes: '32x32', type: 'image/png' },
+        { url: '/brand/icon-192.png', sizes: '192x192', type: 'image/png' }
+      ],
+      apple: '/brand/apple-touch-icon.png'
+    },
+    alternates: { languages: { fa: base + '/', en: base + '/en' } },
+    openGraph: {
+      images: ['/brand/icon-1024.png'],
+      locale: lang === 'fa' ? 'fa_IR' : 'en_US',
+      siteName: 'Directino'
+    }
+  }
 }
 
 export const viewport: Viewport = {
@@ -36,9 +53,10 @@ export const viewport: Viewport = {
   viewportFit: 'cover'
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const { lang } = await getDict()
   return (
-    <html lang="fa" dir="rtl" className={dana.variable}>
+    <html lang={lang} dir={lang === 'fa' ? 'rtl' : 'ltr'} className={dana.variable + ' ' + bricolage.variable}>
       <body>{children}</body>
     </html>
   )

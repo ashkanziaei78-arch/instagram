@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { getLang, localize } from '@/lib/i18n'
 import type { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { seal } from '@/lib/crypto'
@@ -8,28 +9,31 @@ export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams
+  // زبان از کوکی؛ این مسیرها از بیرون (اینستاگرام، بانک) صدا زده می‌شوند
+  const lang = await getLang()
+  const L = (path: string) => localize(lang, path)
   const sql = await db()
   const [st] = await sql<{ user_id: string | null; nonce: string | null }[]>`
     delete from dx_oauth_states where state = ${p.get('state') ?? ''}
       and created_at > now() - interval '20 minutes'
     returning user_id, nonce`
-  if (!st) redirect('/dashboard?ig=expired')
+  if (!st) redirect(L('/dashboard?ig=expired'))
 
   const code = p.get('code')
-  if (!code) redirect(st.nonce ? '/connect/done?status=denied' : '/dashboard?ig=denied')
+  if (!code) redirect(L(st.nonce ? '/connect/done?status=denied' : '/dashboard?ig=denied'))
 
   let conn
   try {
     conn = await completeLogin(code)
   } catch (e) {
     console.error('oauth', e)
-    redirect(st.nonce ? '/connect/done?status=error' : '/dashboard?ig=error')
+    redirect(L(st.nonce ? '/connect/done?status=error' : '/dashboard?ig=error'))
   }
 
   if (st.nonce) {
     await sql`insert into dx_desktop_claims (nonce, payload) values (${st.nonce}, ${seal(JSON.stringify(conn))})
               on conflict (nonce) do update set payload = excluded.payload, created_at = now()`
-    redirect('/connect/done?status=ok&u=' + encodeURIComponent(conn.username))
+    redirect(L('/connect/done') + '?status=ok&u=' + encodeURIComponent(conn.username))
   }
 
   let webhookOk = true
@@ -46,5 +50,5 @@ export async function GET(req: NextRequest) {
     on conflict (ig_user_id) do update set user_id = excluded.user_id, username = excluded.username,
       token_enc = excluded.token_enc, token_expires_at = excluded.token_expires_at,
       webhook_ok = excluded.webhook_ok, updated_at = now()`
-  redirect('/dashboard?ig=ok')
+  redirect(L('/dashboard?ig=ok'))
 }

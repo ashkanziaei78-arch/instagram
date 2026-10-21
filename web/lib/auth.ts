@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { db, hasDb, type UserRow } from './db'
 import { safeEqual, sign } from './crypto'
+import { getLang, localize } from './i18n'
 
 const COOKIE = 'dx_session'
 const MAX_AGE = 30 * 24 * 60 * 60
@@ -51,7 +52,10 @@ export async function currentUser(): Promise<UserRow | null> {
 
 export async function requireUser(next = '/dashboard'): Promise<UserRow> {
   const u = await currentUser()
-  if (!u) redirect('/login?next=' + encodeURIComponent(next))
+  if (!u) {
+    const lang = await getLang()
+    redirect(localize(lang, '/login') + '?next=' + encodeURIComponent(localize(lang, next)))
+  }
   return u
 }
 

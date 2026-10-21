@@ -67,7 +67,7 @@ export async function handleWebhook(payload: { object?: string; entry?: Entry[] 
       where a.ig_user_id = ${entry.id}`
     if (!acc) continue
     if (!acc.sub_until || new Date(acc.sub_until).getTime() < Date.now()) {
-      await log(acc, 'skip', false, 'اشتراک تمام شده — پیامی فرستاده نشد')
+      await log(acc, 'skip', false, JSON.stringify({ e: 'expired' }))
       continue
     }
     const token = unseal(acc.token_enc)
@@ -83,7 +83,7 @@ export async function handleWebhook(payload: { object?: string; entry?: Entry[] 
         await privateReply(acc.ig_user_id, token, c.id, fill(rule.reply, c.from?.username), buttonOf(rule))
         if (rule.public_reply) await replyToComment(token, c.id, fill(rule.public_reply, c.from?.username))
         await hit(rule)
-        await log(acc, 'comment', true, `کامنت «${c.text ?? ''}» از @${c.from?.username ?? '?'} → دایرکت رفت`)
+        await log(acc, 'comment', true, JSON.stringify({ t: c.text ?? '', u: c.from?.username ?? '' }))
       } catch (e) {
         await log(acc, 'comment', false, (e as Error).message)
       }
@@ -100,8 +100,7 @@ export async function handleWebhook(payload: { object?: string; entry?: Entry[] 
       try {
         await sendDm(acc.ig_user_id, token, m.sender.id, fill(rule.reply), buttonOf(rule))
         await hit(rule)
-        const what = trigger === 'story' ? (isMention ? 'منشن استوری' : 'جواب استوری') : `دایرکت «${msg.text ?? ''}»`
-        await log(acc, trigger, true, what + ' → جواب رفت')
+        await log(acc, isMention ? 'mention' : trigger, true, JSON.stringify({ t: msg.text ?? '' }))
       } catch (e) {
         await log(acc, trigger, false, (e as Error).message)
       }

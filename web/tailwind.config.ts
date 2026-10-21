@@ -16,7 +16,7 @@ export default {
         sun: '#fcc730'
       },
       fontFamily: {
-        sans: ['var(--font-dana)', 'Tahoma', 'sans-serif']
+        sans: ['var(--font-body)', 'Tahoma', 'sans-serif']
       },
       backgroundImage: {
         brand: 'linear-gradient(135deg, #5b2ef0 0%, #c22fa8 35%, #e1306c 55%, #fd8d32 82%, #fcc730 100%)'

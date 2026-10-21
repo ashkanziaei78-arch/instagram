@@ -4,6 +4,10 @@
 
 :root {
   color-scheme: dark;
+  --font-body: var(--font-dana);
+}
+html[lang='en'] {
+  --font-body: var(--font-bricolage);
 }
 
 html {

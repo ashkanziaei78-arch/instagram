@@ -1,18 +1,23 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { AuthForm } from '@/components/AuthForm'
 import { AuthShell } from '@/components/AuthShell'
-import { redirect } from 'next/navigation'
-import { currentUser } from '@/lib/auth'
 import { signupAction } from '@/lib/actions-auth'
+import { currentUser } from '@/lib/auth'
+import { getDict, localize, lp } from '@/lib/i18n'
 
-export const metadata: Metadata = { title: 'ثبت‌نام' }
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getDict()
+  return { title: t.auth.signupTitle }
+}
 
-export default async function SignupPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
-  const { next } = await searchParams
-  if (await currentUser().catch(() => null)) redirect(next ?? '/dashboard')
+export default async function Page({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const { lang, t } = await getDict()
+  const next = localize(lang, (await searchParams).next ?? '/dashboard')
+  if (await currentUser().catch(() => null)) redirect(next)
   return (
-    <AuthShell title="ساخت حساب" sub="یک نام کاربری و رمز برای دایرکتینو بسازید. با همین وارد پنل موبایل و نسخه‌ی ویندوز می‌شوید.">
-      <AuthForm mode="signup" action={signupAction} next={next ?? '/dashboard'} />
+    <AuthShell title={t.auth.signupTitle} sub={t.auth.signupSub} lang={lang} t={t} path="/signup">
+      <AuthForm mode="signup" action={signupAction} next={next} t={t.auth} otherHref={lp(lang, '/login')} />
     </AuthShell>
   )
 }

@@ -966,18 +966,23 @@ export const logRepo = {
     const message = typeof err === 'string' && err && !l.message.includes(err)
       ? l.message + ' — ' + err.slice(0, 300)
       : l.message
-    getDb()
-      .prepare(
-        'INSERT INTO activity_log(account_id, level, category, message, meta, created_at) VALUES(?,?,?,?,?,?)'
-      )
-      .run(
-        l.account_id ?? null,
-        l.level ?? 'info',
-        l.category ?? 'general',
-        message,
-        l.meta ? JSON.stringify(l.meta) : null,
-        now()
-      )
+    // ثبت گزارش هرگز نباید اپ را بخواباند — مثلا هنگام بستن اپ وقتی دیتابیس باز نشده
+    try {
+      getDb()
+        .prepare(
+          'INSERT INTO activity_log(account_id, level, category, message, meta, created_at) VALUES(?,?,?,?,?,?)'
+        )
+        .run(
+          l.account_id ?? null,
+          l.level ?? 'info',
+          l.category ?? 'general',
+          message,
+          l.meta ? JSON.stringify(l.meta) : null,
+          now()
+        )
+    } catch {
+      /* گزارش از دست می‌رود، نه اپ */
+    }
   },
   list(limit = 200, accountId?: number): ActivityLogRow[] {
     return accountId

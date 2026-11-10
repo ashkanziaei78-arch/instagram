@@ -4,7 +4,7 @@
  * اجرا: npm run test:builder
  */
 import { rmSync, existsSync } from 'node:fs'
-import { initDb, getDb } from '../src/core/db/index'
+import { initDb, getDb, closeDb } from '../src/core/db/index'
 import { accountsRepo, contactsRepo, formsRepo, jobsRepo, rulesRepo } from '../src/core/db/repos'
 import { handleIncomingComment, handleIncomingDm, handleStoryEvent, validateAnswer } from '../src/core/automations'
 import { richToText } from '../src/core/engine/types'
@@ -35,6 +35,19 @@ const payloads = (kind: string): Record<string, unknown>[] =>
     .map((j) => ({ ...JSON.parse(j.payload), run_at: j.run_at }))
 
 ;(async () => {
+  console.log('\n=== 0. مهاجرت نیمه‌کاره (ستون‌ها هست، نسخه ثبت نشده) ===')
+  initDb(DB)
+  getDb().pragma('user_version = 3')
+  closeDb()
+  let reopened = true
+  try {
+    initDb(DB)
+  } catch (e) {
+    reopened = false
+    console.log('    ' + (e as Error).message)
+  }
+  check('دیتابیس دوباره باز شد و خطای duplicate column نداد', reopened)
+  check('نسخه دوباره ۴ شد', Number(getDb().pragma('user_version', { simple: true })) === 4)
   initDb(DB)
   const acc = accountsRepo.upsert({ ig_user_id: '17841400000000099', username: 'mahtab.store', engine: 'graph' })
 

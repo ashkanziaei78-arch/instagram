@@ -28,7 +28,7 @@ export function initDb(filePath: string): DbHandle {
     if (m.version > current) {
       try {
         db.exec('BEGIN')
-        db.exec(m.sql)
+        db.exec(skipExistingColumns(db, m.sql))
         db.exec('COMMIT')
         // user_version داخل تراکنش قابل تغییر نیست، پس بعد از COMMIT
         db.pragma('user_version = ' + m.version)
@@ -43,6 +43,20 @@ export function initDb(filePath: string): DbHandle {
     }
   }
   return db
+}
+
+/**
+ * ستون‌هایی که از قبل وجود دارند را از مهاجرت حذف می‌کند.
+ *
+ * چرا: SQLite برای ADD COLUMN «IF NOT EXISTS» ندارد. اگر مهاجرتی یک بار نیمه‌کاره
+ * اجرا شده باشد (مثلا اپ وسط کار بسته شد و user_version ثبت نشد)، اجرای دوباره
+ * با «duplicate column» شکست می‌خورد و اپ دیگر باز نمی‌شد.
+ */
+function skipExistingColumns(handle: DbHandle, sql: string): string {
+  return sql.replace(/ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)[^;]*;/gi, (stmt, table: string, column: string) => {
+    const cols = handle.prepare('PRAGMA table_info(' + table + ')').all<{ name: string }>()
+    return cols.some((c) => c.name.toLowerCase() === column.toLowerCase()) ? '' : stmt
+  })
 }
 
 export function getDb(): DbHandle {

@@ -26,6 +26,8 @@ if (existsSync(legacyUserData)) app.setPath('userData', legacyUserData)
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let quitting = false
+/** پنجره‌ی اول ساخته شده؛ قبل از آن IPC آماده نیست و پنجره‌ی دوم نباید ساخته شود */
+let booted = false
 
 /**
  * قفل تک‌نمونه.
@@ -38,11 +40,15 @@ if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.show()
-      mainWindow.focus()
+    // اگر پنجره به هر دلیل ساخته نشده بود، همین حالا بساز؛ وگرنه دوبار کلیک روی
+    // آیکن هیچ اثری نداشت و اپ «باز نمی‌شد»
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      if (booted) mainWindow = createWindow()
+      return
     }
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
   })
 }
 
@@ -125,7 +131,8 @@ function createTray(): void {
   tray.on('double-click', () => mainWindow?.show())
 }
 
-async function bootstrap(): Promise<void> {
+/** false یعنی دیتابیس باز نشد و اپ باید بسته شود */
+async function bootstrap(): Promise<boolean> {
   const dbPath = join(app.getPath('userData'), 'data', 'igsuite.sqlite')
 
   try {
@@ -136,8 +143,7 @@ async function bootstrap(): Promise<void> {
       'مسیر: ' + dbPath + '\n\n' + (e as Error).message +
         '\n\nاگر اپ قبلا ناگهانی بسته شده، دوباره اجرا کنید؛ قفل کهنه خودکار پاک می‌شود.'
     )
-    app.quit()
-    return
+    return false
   }
 
   // موتورها به انبار رمزنگاری‌شده وصل می‌شوند
@@ -217,12 +223,29 @@ async function bootstrap(): Promise<void> {
   setInterval(() => logRepo.prune(45), 6 * 60 * 60 * 1000)
 
   logRepo.add({ level: 'info', category: 'app', message: 'اپ راه‌اندازی شد' })
+  return true
 }
 
 app.whenReady().then(async () => {
-  await bootstrap()
+  let ok: boolean
+  try {
+    ok = await bootstrap()
+  } catch (e) {
+    // خطای راه‌اندازی (مثلا پورت وبهوک گرفته شده) نباید اپ را بی‌پنجره و
+    // نامرئی در پس‌زمینه نگه دارد؛ پنجره باز می‌شود و خطا در گزارش می‌ماند
+    ok = true
+    logRepo.add({ level: 'error', category: 'app', message: 'بخشی از راه‌اندازی خطا داد: ' + (e as Error).message })
+  }
+  if (!ok) {
+    // exit و نه quit: پروسه‌ی نیمه‌جان قفل تک‌نمونه را نگه می‌داشت و اجرای بعدی
+    // بی‌صدا بسته می‌شد
+    quitting = true
+    app.exit(1)
+    return
+  }
   registerIpc(() => mainWindow)
   mainWindow = createWindow()
+  booted = true
   createTray()
 
   app.on('activate', () => {
@@ -236,9 +259,13 @@ app.on('before-quit', () => {
 })
 
 app.on('will-quit', () => {
-  jobQueue.stop()
-  pollerScheduler.stop()
-  webhookServer.stop()
+  try {
+    jobQueue.stop()
+    pollerScheduler.stop()
+    webhookServer.stop()
+  } catch {
+    /* بستن نباید خطای «A JavaScript error occurred» بدهد */
+  }
   try {
     logRepo.add({ level: 'info', category: 'app', message: 'اپ بسته شد' })
   } catch {

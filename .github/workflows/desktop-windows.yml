@@ -1,0 +1,57 @@
+# ساخت نصب‌کننده‌ی ویندوز اپ دسکتاپ دایرکتینو روی سرور ویندوزی گیت‌هاب.
+# خروجی در صفحه‌ی همان اجرا (Actions → Artifacts) برای دانلود قرار می‌گیرد.
+#
+# App Secret عمداً داخل این ساخت نیست: کاربر بار اول آن را در «تنظیمات» اپ
+# وارد می‌کند. فقط App ID (که محرمانه نیست) از پیش پر شده است.
+name: Desktop (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'build/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'electron-builder.yml'
+      - 'electron.vite.config.ts'
+      - '.github/workflows/desktop-windows.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: App ID (not secret)
+        shell: bash
+        run: |
+          {
+            echo "IG_APP_ID=1944060546532442"
+            echo "IG_REDIRECT_URI=https://www.facebook.com/"
+          } > .env.local
+
+      - name: Build
+        run: npm run build
+
+      - name: Package installer
+        run: npx electron-builder --win --x64 --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Directino-windows-setup
+          path: release/*-setup.exe
+          retention-days: 14
+          compression-level: 0

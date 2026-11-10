@@ -1,5 +1,5 @@
 import { BrowserWindow, Menu, Tray, app, dialog, nativeImage, shell } from 'electron'
-import { existsSync } from 'node:fs'
+import { appendFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { closeDb, initDb } from '../core/db/index'
 import { accountsRepo, logRepo, settingsRepo } from '../core/db/repos'
@@ -22,6 +22,21 @@ import { setAutomationAllowed } from './automation-gate'
  */
 const legacyUserData = join(app.getPath('appData'), 'IG Auto Suite')
 if (existsSync(legacyUserData)) app.setPath('userData', legacyUserData)
+
+/**
+ * گزارش راه‌اندازی در یک فایل متنی ساده. وقتی اپ روی کامپیوتر کاربر باز
+ * نمی‌شود، دیتابیس و پنجره در دسترس نیستند؛ این فایل تنها راه فهمیدن این است
+ * که راه‌اندازی تا کجا رسید.
+ */
+function step(msg: string): void {
+  try {
+    appendFileSync(join(app.getPath('userData'), 'startup.log'), new Date().toISOString() + '  ' + msg + '\n')
+  } catch {
+    /* نوشتن گزارش هم نباید اپ را بخواباند */
+  }
+}
+process.on('uncaughtException', (e) => step('uncaughtException: ' + (e?.stack ?? String(e))))
+process.on('unhandledRejection', (e) => step('unhandledRejection: ' + String((e as Error)?.stack ?? e)))
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -70,7 +85,20 @@ function createWindow(): BrowserWindow {
     }
   })
 
-  win.on('ready-to-show', () => win.show())
+  win.on('ready-to-show', () => {
+    step('window ready-to-show')
+    win.show()
+  })
+  // اگر صفحه به هر دلیل (مثلا مشکل کارت گرافیک) هرگز ready-to-show نداد، پنجره
+  // نامرئی می‌ماند؛ بعد از چند ثانیه به‌هرحال نشانش بده
+  setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) {
+      step('window not shown after 6s — forcing show')
+      win.show()
+    }
+  }, 6000)
+  win.webContents.on('render-process-gone', (_e, d) => step('renderer gone: ' + d.reason + ' code=' + d.exitCode))
+  win.webContents.on('did-fail-load', (_e, code, desc) => step('page failed to load: ' + code + ' ' + desc))
 
   // لینک‌های خارجی در مرورگر سیستم باز شوند، نه داخل اپ
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -136,8 +164,11 @@ async function bootstrap(): Promise<boolean> {
   const dbPath = join(app.getPath('userData'), 'data', 'igsuite.sqlite')
 
   try {
+    step('opening database ' + dbPath)
     initDb(dbPath)
+    step('database open')
   } catch (e) {
+    step('database error: ' + (e as Error).message)
     dialog.showErrorBox(
       'خطا در باز کردن دیتابیس',
       'مسیر: ' + dbPath + '\n\n' + (e as Error).message +
@@ -171,6 +202,7 @@ async function bootstrap(): Promise<boolean> {
     })
   }
 
+  step('engines ready')
   registerJobHandlers()
 
   setAiKeyProvider((provider) => secureStore().getAiKey(provider))
@@ -201,6 +233,15 @@ async function bootstrap(): Promise<boolean> {
     }
   }
 
+  return true
+}
+
+/**
+ * کارهایی که ممکن است منتظر شبکه بمانند. عمدا *بعد* از ساختن پنجره و جدا از
+ * آن اجرا می‌شوند: قبلا اگر یکی از این‌ها گیر می‌کرد (مثلا شبکه بدون VPN)، اپ
+ * در Task Manager بود ولی هیچ پنجره و آیکنی نمی‌ساخت.
+ */
+async function startBackground(): Promise<void> {
   // صف و نظرسنجی فقط با اشتراک فعال؛ نسخه‌ی شخصی (بدون آدرس سایت) همیشه فعال است
   const license = await checkLicense()
   setAutomationAllowed(license.active)
@@ -212,7 +253,11 @@ async function bootstrap(): Promise<boolean> {
 
   if (settingsRepo.get<boolean>('webhookEnabled', false)) {
     const port = settingsRepo.get<number>('webhookPort', 8787)
-    await startWebhookFromSettings(port)
+    const r = await Promise.race([
+      startWebhookFromSettings(port),
+      new Promise<{ ok: boolean; message: string }>((res) => setTimeout(() => res({ ok: false, message: 'timeout' }), 10_000))
+    ])
+    step('webhook: ' + r.message)
   }
 
   // تازه‌سازی توکن: یک بار در شروع و بعد روزانه
@@ -223,14 +268,17 @@ async function bootstrap(): Promise<boolean> {
   setInterval(() => logRepo.prune(45), 6 * 60 * 60 * 1000)
 
   logRepo.add({ level: 'info', category: 'app', message: 'اپ راه‌اندازی شد' })
-  return true
+  step('background tasks started')
 }
 
 app.whenReady().then(async () => {
+  step('---- start v' + app.getVersion() + ' userData=' + app.getPath('userData'))
   let ok: boolean
   try {
     ok = await bootstrap()
+    step('core ready: ' + ok)
   } catch (e) {
+    step('core error: ' + ((e as Error).stack ?? e))
     // خطای راه‌اندازی (مثلا پورت وبهوک گرفته شده) نباید اپ را بی‌پنجره و
     // نامرئی در پس‌زمینه نگه دارد؛ پنجره باز می‌شود و خطا در گزارش می‌ماند
     ok = true
@@ -246,7 +294,14 @@ app.whenReady().then(async () => {
   registerIpc(() => mainWindow)
   mainWindow = createWindow()
   booted = true
-  createTray()
+  step('window created')
+  try {
+    createTray()
+    step('tray created')
+  } catch (e) {
+    step('tray error: ' + (e as Error).message)
+  }
+  void startBackground().catch((e) => step('background error: ' + ((e as Error).stack ?? e)))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()

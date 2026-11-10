@@ -48,7 +48,28 @@ const payloads = (kind: string): Record<string, unknown>[] =>
   }
   check('دیتابیس دوباره باز شد و خطای duplicate column نداد', reopened)
   check('نسخه دوباره ۴ شد', Number(getDb().pragma('user_version', { simple: true })) === 4)
+  closeDb()
+
+  console.log('\n=== 0.۵ دیتابیس با نسخه‌ی تازه ولی بدون جدول ===')
+  cleanup()
   initDb(DB)
+  for (const t of getDb()
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+    .all<{ name: string }>()) {
+    getDb().exec('DROP TABLE IF EXISTS ' + t.name)
+  }
+  check('جدول‌ها پاک شدند و نسخه ۴ ماند', Number(getDb().pragma('user_version', { simple: true })) === 4)
+  closeDb()
+  initDb(DB)
+  const names = getDb()
+    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+    .all<{ name: string }>()
+    .map((r) => r.name)
+  check('settings دوباره ساخته شد', names.includes('settings'), names)
+  check('action_counters دوباره ساخته شد', names.includes('action_counters'))
+  check('form_sessions دوباره ساخته شد', names.includes('form_sessions'))
+  const cols = getDb().prepare('PRAGMA table_info(rules)').all<{ name: string }>().map((c) => c.name)
+  check('ستون extra_triggers در rules هست', cols.includes('extra_triggers'), cols)
   const acc = accountsRepo.upsert({ ig_user_id: '17841400000000099', username: 'mahtab.store', engine: 'graph' })
 
   console.log('\n=== 1. یک قانون، چند تریگر ===')

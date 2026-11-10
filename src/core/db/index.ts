@@ -42,7 +42,49 @@ export function initDb(filePath: string): DbHandle {
       }
     }
   }
+  repairMissingTables(db)
   return db
+}
+
+/**
+ * اگر جدولی که مهاجرت‌ها می‌سازند نیست، همه‌ی مهاجرت‌ها را دوباره (و بی‌خطر)
+ * اجرا می‌کند.
+ *
+ * چرا: روی کامپیوتر یک کاربر فایل دیتابیس شماره‌ی نسخه‌ی تازه را داشت ولی
+ * هیچ جدولی نداشت (احتمالا از یک اجرای نیمه‌کاره‌ی قبلی). چون نسخه بالا بود،
+ * مهاجرت‌ها رد می‌شدند و هر صفحه با «no such table» خالی می‌ماند. همه‌ی
+ * CREATEها IF NOT EXISTS دارند و ستون‌های موجود رد می‌شوند، پس اجرای دوباره
+ * چیزی را خراب نمی‌کند.
+ */
+function repairMissingTables(handle: DbHandle): void {
+  const expected = new Set<string>()
+  for (const m of MIGRATIONS) {
+    for (const t of m.sql.matchAll(/CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+(\w+)/gi)) expected.add(t[1])
+  }
+  const have = new Set(
+    handle
+      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+      .all<{ name: string }>()
+      .map((r) => r.name)
+  )
+  const missing = [...expected].filter((t) => !have.has(t))
+  if (missing.length === 0) return
+
+  for (const m of MIGRATIONS) {
+    try {
+      handle.exec('BEGIN')
+      handle.exec(skipExistingColumns(handle, m.sql))
+      handle.exec('COMMIT')
+    } catch (e) {
+      try {
+        handle.exec('ROLLBACK')
+      } catch {
+        /* ignore */
+      }
+      throw new Error('بازسازی جدول‌های ' + missing.join('، ') + ' شکست خورد: ' + (e as Error).message)
+    }
+  }
+  handle.pragma('user_version = ' + MIGRATIONS[MIGRATIONS.length - 1].version)
 }
 
 /**

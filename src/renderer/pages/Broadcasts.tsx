@@ -175,14 +175,14 @@ export function BroadcastsPage({ accountId }: { accountId: number | null }): JSX
                     </div>
                   </div>
 
-                  <p className="mb-2 whitespace-pre-wrap rounded bg-[#0b0f17] px-3 py-2 text-xs leading-relaxed text-slate-300">
+                  <p className="mb-2 whitespace-pre-wrap rounded bg-[#0e0a1c] px-3 py-2 text-xs leading-relaxed text-slate-300">
                     {b.message}
                   </p>
 
                   {b.total > 0 && (
                     <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
                       <div
-                        className="h-full rounded-full bg-gradient-to-l from-[#833ab4] to-[#e1306c] transition-all"
+                        className="h-full rounded-full bg-gradient-to-l from-[#5b2ef0] to-[#e1306c] transition-all"
                         style={{ width: pct + '%' }}
                       />
                     </div>

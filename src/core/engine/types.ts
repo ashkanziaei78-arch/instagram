@@ -1,4 +1,4 @@
-import type { Capability, EngineKind } from '../../shared/types'
+import type { Capability, CatalogCard, EngineKind, MessageMedia } from '../../shared/types'
 
 export interface IgUser {
   ig_user_id: string
@@ -78,6 +78,21 @@ export interface SendDmOptions {
   buttons?: { title: string; url: string }[]
   /** اگر true باشد، پیام به عنوان private reply به یک کامنت ارسال می‌شود */
   commentId?: string
+  /** عکس/ویدیو/صدا — فقط رسمی؛ موتورهای دیگر لینکش را در متن می‌گذارند */
+  media?: MessageMedia
+  /** کارت‌های کاتالوگ (generic template) — فقط رسمی */
+  cards?: CatalogCard[]
+}
+
+/** متن جایگزین برای موتوری که رسانه و کارت را نمی‌شناسد: همه با لینک در متن */
+export function richToText(text: string, opts?: SendDmOptions): string {
+  const parts = [text]
+  if (opts?.media?.url) parts.push(opts.media.url)
+  for (const c of opts?.cards ?? []) {
+    parts.push(['• ' + c.title, c.subtitle, c.url].filter(Boolean).join(' — '))
+  }
+  for (const b of opts?.buttons ?? []) parts.push(b.title + ': ' + b.url)
+  return parts.filter((x) => x && x.trim()).join('\n')
 }
 
 /**

@@ -2,7 +2,7 @@ import express, { type Request, type Response } from 'express'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import type { Server } from 'node:http'
 import { accountsRepo, logRepo } from '../core/db/repos'
-import { handleIncomingComment, handleIncomingDm } from '../core/automations'
+import { handleIncomingComment, handleIncomingDm, handleStoryEvent } from '../core/automations'
 import { secureStore } from './secure-store'
 
 /**
@@ -37,7 +37,15 @@ interface MetaWebhookBody {
       sender?: { id?: string }
       recipient?: { id?: string }
       timestamp?: number
-      message?: { mid?: string; text?: string; is_echo?: boolean }
+      message?: {
+        mid?: string
+        text?: string
+        is_echo?: boolean
+        reply_to?: { story?: { id?: string; url?: string } }
+        attachments?: { type?: string }[]
+      }
+      /** ضربه روی دکمه‌ی جواب سریع / منوی سؤال‌ها */
+      postback?: { title?: string; payload?: string }
     }[]
   }[]
 }
@@ -221,8 +229,37 @@ export class WebhookServer {
           // is_echo یعنی پیامی که *خودمان* فرستادیم؛ پردازشش حلقه می‌سازد
           if (m.message?.is_echo) continue
           const senderId = String(m.sender?.id ?? '')
-          const text = m.message?.text
-          if (!senderId || !text) continue
+          if (!senderId) continue
+
+          // جواب به استوری: متا شناسه‌ی همان استوری را می‌دهد، پس قانونِ
+          // «استوری خاص» فقط برای همان استوری فعال می‌شود
+          const storyId = m.message?.reply_to?.story?.id
+          if (storyId) {
+            await handleStoryEvent({
+              accountId: account.id,
+              fromUserId: senderId,
+              text: m.message?.text ?? '',
+              messageId: m.message?.mid,
+              idSource: 'graph',
+              storyId,
+              kind: 'story_reply'
+            })
+            continue
+          }
+          if (m.message?.attachments?.some((a) => a.type === 'story_mention')) {
+            await handleStoryEvent({
+              accountId: account.id,
+              fromUserId: senderId,
+              text: '',
+              messageId: m.message?.mid,
+              idSource: 'graph',
+              kind: 'story_mention'
+            })
+            continue
+          }
+
+          const text = m.message?.text ?? m.postback?.title
+          if (!text) continue
 
           await handleIncomingDm({
             accountId: account.id,

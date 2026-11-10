@@ -77,6 +77,28 @@ export type ActionType =
   | 'follow_user'
   | 'add_tag'
   | 'wait'
+  /** پیام پیگیری: چند ساعت بعد، فقط اگر پنجره‌ی ۲۴ ساعته‌ی گفت‌وگو باز باشد */
+  | 'follow_up'
+
+/** کارت کاتالوگ — در API رسمی به‌صورت کارت‌های کنار هم (generic template) می‌رود */
+export interface CatalogCard {
+  title: string
+  subtitle?: string
+  imageUrl?: string
+  url?: string
+  buttonTitle?: string
+}
+
+/** یک سؤال فرم داخل دایرکت؛ نوع پاسخ اعتبارسنجی را مشخص می‌کند */
+export interface FormQuestion {
+  kind: 'name' | 'phone' | 'email' | 'custom'
+  ask: string
+}
+
+export interface MessageMedia {
+  url: string
+  kind: 'image' | 'video' | 'audio'
+}
 
 export interface RuleAction {
   id?: number
@@ -93,6 +115,18 @@ export interface RuleAction {
    * بعد از فالو دوباره امتحان کند.
    */
   followGate?: string
+  /** چند نسخه‌ی متن؛ هر بار یکی تصادفی انتخاب می‌شود (پاسخ عمومی کامنت، دایرکت) */
+  variants?: string[]
+  /** عکس/ویدیو/صدا همراه دایرکت */
+  media?: MessageMedia
+  /** کارت‌های کاتالوگ محصول (حداکثر ۱۰) */
+  cards?: CatalogCard[]
+  /** فرم: سؤال‌ها یکی‌یکی در دایرکت پرسیده می‌شوند */
+  questions?: FormQuestion[]
+  /** پیام پایان فرم */
+  doneText?: string
+  /** برای follow_up: چند ساعت بعد از پیام اول */
+  hours?: number
   order: number
 }
 
@@ -108,6 +142,13 @@ export interface Rule {
   case_sensitive: boolean
   /** خالی = همه‌ی پست‌ها، یا لیست media_id ها */
   media_scope: string | null
+  /**
+   * تریگرهای اضافه: یک قانون می‌تواند هم روی کامنت، هم استوری و هم دایرکت کار
+   * کند (مثل «شرط برای» با چند گزینه). trigger_type اولی است و این‌ها بقیه.
+   */
+  extra_triggers: TriggerType[]
+  /** خالی = همه‌ی استوری‌ها، یا لیست شناسه‌ی استوری‌ها */
+  story_scope: string | null
   actions: RuleAction[]
   /** هر کاربر فقط یک‌بار این قانون را دریافت کند */
   once_per_user: boolean

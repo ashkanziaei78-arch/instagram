@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { MatchMode, Rule, RuleAction, TriggerType } from '../../shared/types'
 import { Card, EmptyState, Field, Modal, Notice, Select, Spinner, Toggle } from '../components/ui'
 import { call, callRaw, fmtFull, toasts } from '../lib/api'
+import { RuleBuilder } from '../components/RuleBuilder'
 import type { AiProviderId, AiSettingsView } from '../../shared/ipc'
 
 const TRIGGERS: { value: TriggerType; label: string; desc: string }[] = [
@@ -145,6 +146,8 @@ export function AutomationsPage({ accountId }: { accountId: number | null }): JS
   const [rules, setRules] = useState<Rule[]>([])
   const [loading, setLoading] = useState(true)
   const [draft, setDraft] = useState<Draft | null>(null)
+  // سازنده‌ی «کامنت هوشمند»: null = بسته، 'new' = قانون تازه، یا قانون در حال ویرایش
+  const [building, setBuilding] = useState<Rule | 'new' | null>(null)
 
   const load = useCallback(async () => {
     if (!accountId) {
@@ -206,8 +209,11 @@ export function AutomationsPage({ accountId }: { accountId: number | null }): JS
                 بررسی دایرکت‌ها الان
               </button>
             )}
-            <button className="btn-primary btn-sm" onClick={() => setDraft(emptyDraft(accountId))}>
-              + قانون جدید
+            <button className="btn-ghost btn-sm" title="فرم قدیمی با همه‌ی جزئیات" onClick={() => setDraft(emptyDraft(accountId))}>
+              قانون پیشرفته
+            </button>
+            <button className="btn-primary btn-sm" onClick={() => setBuilding('new')}>
+              + کامنت هوشمند
             </button>
           </div>
         }
@@ -220,8 +226,8 @@ export function AutomationsPage({ accountId }: { accountId: number | null }): JS
             title="هنوز قانونی نساخته‌اید"
             body="پرکاربردترین حالت: کاربر عدد ۱ را کامنت می‌کند و لینک را در دایرکت می‌گیرد. با «قانون جدید» شروع کنید."
             action={
-              <button className="btn-primary mt-1" onClick={() => setDraft(emptyDraft(accountId))}>
-                ساخت اولین قانون
+              <button className="btn-primary mt-1" onClick={() => setBuilding('new')}>
+                ساخت اولین کامنت هوشمند
               </button>
             }
           />
@@ -249,7 +255,9 @@ export function AutomationsPage({ accountId }: { accountId: number | null }): JS
                       )}
                     </td>
                     <td className="td text-xs text-slate-400">
-                      {TRIGGERS.find((t) => t.value === r.trigger_type)?.label ?? r.trigger_type}
+                      {[r.trigger_type, ...(r.extra_triggers ?? [])]
+                        .map((tt) => TRIGGERS.find((t) => t.value === tt)?.label ?? tt)
+                        .join(' + ')}
                     </td>
                     <td className="td">
                       {r.keywords ? (
@@ -271,7 +279,9 @@ export function AutomationsPage({ accountId }: { accountId: number | null }): JS
                                   ? 'پاسخ کامنت'
                                   : a.type === 'wait'
                                     ? 'صبر'
-                                    : a.type
+                                    : a.type === 'follow_up'
+                                      ? 'پیگیری ' + (a.hours ?? '') + 'س'
+                                      : a.type
                             )
                             .join(' → ')}
                     </td>
@@ -286,11 +296,15 @@ export function AutomationsPage({ accountId }: { accountId: number | null }): JS
                         <button className="btn-ghost btn-sm" onClick={() => void toggle(r)}>
                           {r.enabled ? 'خاموش' : 'فعال'}
                         </button>
+                        <button className="btn-ghost btn-sm" onClick={() => setBuilding(r)}>
+                          ویرایش
+                        </button>
                         <button
                           className="btn-ghost btn-sm"
+                          title="ویرایش در فرم پیشرفته"
                           onClick={() => setDraft({ ...r, account_id: accountId })}
                         >
-                          ویرایش
+                          پیشرفته
                         </button>
                         <button className="btn-danger btn-sm" onClick={() => void remove(r)}>
                           حذف
@@ -307,6 +321,18 @@ export function AutomationsPage({ accountId }: { accountId: number | null }): JS
 
       <AiReplyCard />
       {accountId && <IceBreakersCard accountId={accountId} />}
+
+      {building && (
+        <RuleBuilder
+          accountId={accountId}
+          rule={building === 'new' ? undefined : building}
+          onClose={() => setBuilding(null)}
+          onSaved={() => {
+            setBuilding(null)
+            void load()
+          }}
+        />
+      )}
 
       {draft && (
         <RuleEditor
@@ -698,7 +724,7 @@ function RuleEditor({
                   {testResult.preview.map((p, i) => (
                     <p
                       key={i}
-                      className="whitespace-pre-wrap rounded-lg bg-[#0b0f17] px-3 py-2 text-xs leading-relaxed text-slate-200"
+                      className="whitespace-pre-wrap rounded-lg bg-[#0e0a1c] px-3 py-2 text-xs leading-relaxed text-slate-200"
                     >
                       {p}
                     </p>
@@ -881,7 +907,7 @@ function AiReplyCard(): JSX.Element {
             </button>
           </div>
           {testOut && (
-            <p className="mt-2 whitespace-pre-wrap rounded-lg bg-[#0b0f17] px-3 py-2 text-xs leading-relaxed text-slate-200">
+            <p className="mt-2 whitespace-pre-wrap rounded-lg bg-[#0e0a1c] px-3 py-2 text-xs leading-relaxed text-slate-200">
               {testOut}
             </p>
           )}

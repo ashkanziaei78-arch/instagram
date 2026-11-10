@@ -157,8 +157,8 @@ export function DashboardPage({
               <AreaChart data={growthData} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#c13584" stopOpacity={0.45} />
-                    <stop offset="100%" stopColor="#c13584" stopOpacity={0.02} />
+                    <stop offset="0%" stopColor="#e1306c" stopOpacity={0.45} />
+                    <stop offset="100%" stopColor="#e1306c" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="#ffffff10" vertical={false} />
@@ -171,7 +171,7 @@ export function DashboardPage({
                 />
                 <Tooltip
                   contentStyle={{
-                    background: '#0e1420',
+                    background: '#171127',
                     border: '1px solid #ffffff18',
                     borderRadius: 8,
                     fontSize: 12

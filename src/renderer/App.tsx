@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AccountWithLinks } from '../shared/types'
 import type { LicenseView } from '../shared/ipc'
-import markUrl from './assets/mark.png'
+import wordmarkUrl from './assets/wordmark.png'
 import { ToastHost } from './components/ui'
 import { call, igEvents } from './lib/api'
 import { AccountsPage } from './pages/Accounts'
@@ -132,12 +132,11 @@ export default function App({ license }: { license: LicenseView }): JSX.Element 
   return (
     <div className="flex h-full">
       {/* ───── نوار کناری ───── */}
-      <aside className="flex w-60 shrink-0 flex-col border-l border-white/[0.06] bg-[#0e1420]">
-        <div className="flex items-center gap-2.5 px-4 py-4">
-          <img src={markUrl} alt="" className="h-8 w-8 object-contain" />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-100">دایرکتینو</p>
-            <p className="text-[10px] text-slate-500">
+      <aside className="flex w-60 shrink-0 flex-col border-l border-white/[0.06] bg-[#171127]">
+        <div className="px-4 py-4">
+          <img src={wordmarkUrl} alt="Directino" className="h-6 w-auto" />
+          <div className="mt-1.5 min-w-0">
+            <p className="text-[10px] text-mist">
               {license.required && license.loggedIn
                 ? license.daysLeft.toLocaleString('fa-IR') + ' روز اشتراک مانده'
                 : 'نسخه‌ی ' + __APP_VERSION__}

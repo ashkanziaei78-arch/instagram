@@ -68,7 +68,7 @@ export function BrowserOAuthWizard({
             className={
               'flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors ' +
               (step === n
-                ? 'bg-gradient-to-l from-[#833ab4] to-[#e1306c] text-white'
+                ? 'bg-gradient-to-l from-[#5b2ef0] to-[#e1306c] text-white'
                 : step > n
                   ? 'bg-emerald-500/20 text-emerald-300'
                   : 'bg-white/[0.07] text-slate-500')

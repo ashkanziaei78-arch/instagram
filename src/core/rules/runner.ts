@@ -55,7 +55,15 @@ export function enqueueRuleActions(rule: Rule, ctx: TriggerContext): number {
         continue
 
       case 'send_dm': {
-        if (!action.text) continue
+        const body = pickText(action)
+        const hasRich = !!action.media?.url || (action.cards?.length ?? 0) > 0
+        if (!body && !hasRich) continue
+        // فرم: سؤال اول در همان پیام اول می‌رود، چون پاسخ خصوصی کامنت فقط یک
+        // پیام اجازه دارد؛ جواب کاربر پنجره را باز می‌کند و بقیه‌ی سؤال‌ها می‌آیند
+        const questions = action.questions?.filter((q) => q.ask.trim()) ?? []
+        const text = questions.length
+          ? [body, questions[0].ask].filter(Boolean).join('\n\n')
+          : body
         const id = jobsRepo.enqueue({
           account_id: ctx.accountId,
           kind: 'dm.send',
@@ -64,8 +72,11 @@ export function enqueueRuleActions(rule: Rule, ctx: TriggerContext): number {
           payload: {
             recipientIgId: ctx.userIgId,
             username: ctx.username,
-            text: buildMessage(action.text, vars),
-            buttons: action.buttons,
+            text: buildMessage(text, vars),
+            buttons: action.buttons?.filter((b) => b.title.trim() && b.url.trim()),
+            media: action.media?.url ? action.media : undefined,
+            cards: action.cards?.length ? action.cards.slice(0, 10) : undefined,
+            form: questions.length ? { questions, doneText: action.doneText ? buildMessage(action.doneText, vars) : undefined } : undefined,
             ruleId: rule.id,
             // حضور commentId باعث می‌شود از مسیر private reply برود که
             // نیازی به پنجره‌ی ۲۴ ساعته ندارد
@@ -80,8 +91,36 @@ export function enqueueRuleActions(rule: Rule, ctx: TriggerContext): number {
         break
       }
 
+      case 'follow_up': {
+        const body = pickText(action)
+        if (!body && !action.media?.url && !action.cards?.length) continue
+        const hours = Math.min(23, Math.max(1, action.hours ?? 23))
+        const id = jobsRepo.enqueue({
+          account_id: ctx.accountId,
+          kind: 'dm.send',
+          run_at: Date.now() + cumulativeDelay + hours * 3600 * 1000,
+          dedupe_key: dedupeKey(rule, ctx, action),
+          payload: {
+            recipientIgId: ctx.userIgId,
+            username: ctx.username,
+            text: buildMessage(body, vars),
+            buttons: action.buttons?.filter((b) => b.title.trim() && b.url.trim()),
+            media: action.media?.url ? action.media : undefined,
+            cards: action.cards?.length ? action.cards.slice(0, 10) : undefined,
+            ruleId: rule.id,
+            idSource: ctx.idSource,
+            // بدون شناسه‌ی کامنت: پاسخ خصوصی فقط یک بار مجاز است، پس پیگیری فقط
+            // اگر طرف در این فاصله پیام داده باشد (پنجره‌ی ۲۴ ساعته) می‌رود
+            requireWindow: true
+          }
+        })
+        if (id !== null) queued++
+        break
+      }
+
       case 'reply_comment': {
-        if (!action.text || !ctx.commentId) continue
+        const replyText = pickText(action)
+        if (!replyText || !ctx.commentId) continue
         const id = jobsRepo.enqueue({
           account_id: ctx.accountId,
           kind: 'comment.reply',
@@ -92,7 +131,7 @@ export function enqueueRuleActions(rule: Rule, ctx: TriggerContext): number {
             // لازم دارد، موتور رسمی فقط شناسه‌ی کامنت را. فرمت «mediaId:commentId»
             // هر دو را راضی می‌کند و هر موتور خودش آنچه نیاز دارد را برمی‌دارد.
             commentId: ctx.mediaId ? ctx.mediaId + ':' + ctx.commentId : ctx.commentId,
-            text: buildMessage(action.text, vars),
+            text: buildMessage(replyText, vars),
             ruleId: rule.id
           }
         })
@@ -156,6 +195,13 @@ export function enqueueRuleActions(rule: Rule, ctx: TriggerContext): number {
   }
 
   return queued
+}
+
+/** اگر چند نسخه‌ی متن دارد، یکی تصادفی؛ وگرنه همان text */
+function pickText(action: RuleAction): string {
+  const vs = (action.variants ?? []).map((v) => v.trim()).filter(Boolean)
+  if (vs.length > 0) return vs[Math.floor(Math.random() * vs.length)]
+  return action.text?.trim() ?? ''
 }
 
 /**

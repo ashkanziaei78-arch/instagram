@@ -223,5 +223,30 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
     ALTER TABLE accounts ADD COLUMN alt_ig_user_id TEXT;
     CREATE INDEX IF NOT EXISTS idx_accounts_alt ON accounts(alt_ig_user_id);
     `
+  },
+  {
+    version: 4,
+    sql: `
+    -- یک قانون، چند تریگر (کامنت + استوری + دایرکت) و محدوده‌ی استوری
+    ALTER TABLE rules ADD COLUMN extra_triggers TEXT NOT NULL DEFAULT '';
+    ALTER TABLE rules ADD COLUMN story_scope TEXT;
+    -- جواب‌های فرم داخل دایرکت
+    ALTER TABLE contacts ADD COLUMN phone TEXT;
+    ALTER TABLE contacts ADD COLUMN email TEXT;
+    ALTER TABLE contacts ADD COLUMN form_answers TEXT;
+    -- فرم‌های در حال پر شدن: هر مخاطب در هر حساب حداکثر یکی
+    CREATE TABLE IF NOT EXISTS form_sessions (
+      account_id INTEGER NOT NULL,
+      contact_ig_id TEXT NOT NULL,
+      rule_id INTEGER NOT NULL,
+      step INTEGER NOT NULL DEFAULT 0,
+      questions_json TEXT NOT NULL,
+      answers_json TEXT NOT NULL DEFAULT '{}',
+      done_text TEXT,
+      id_source TEXT,
+      expires_at INTEGER NOT NULL,
+      PRIMARY KEY (account_id, contact_ig_id)
+    );
+    `
   }
 ]

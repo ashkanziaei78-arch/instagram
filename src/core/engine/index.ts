@@ -1,9 +1,9 @@
-import type { Capability, EngineKind, EngineStatus } from '../../shared/types'
+import type { Capability, CatalogCard, EngineKind, EngineStatus, MessageMedia } from '../../shared/types'
 import { contactsRepo, settingsRepo } from '../db/repos'
 import { GraphEngine, type TokenProvider } from './graph-engine'
 import { SessionEngine, type SessionStore } from './session-engine'
 import { WebEngine, type WebSessionStore } from './web-engine'
-import { UnsupportedCapabilityError, type IEngine } from './types'
+import { UnsupportedCapabilityError, richToText, type IEngine } from './types'
 
 export interface EngineManagerOptions {
   tokenProvider: TokenProvider
@@ -123,11 +123,14 @@ export class EngineManager {
        * «گیرنده نامعتبر» می‌دهد. پس جواب باید از همان راهی برود که پیام آمد.
        */
       idSource?: 'web' | 'graph'
+      media?: MessageMedia
+      cards?: CatalogCard[]
     } = {}
   ): Promise<{ via: EngineKind; method: 'private_reply' | 'dm' }> {
+    const rich = { buttons: opts.buttons, media: opts.media, cards: opts.cards }
     // مسیر ۱: پاسخ خصوصی به کامنت
     if (opts.commentId && this.graph.isConnected(accountId)) {
-      await this.graph.replyToCommentPrivate(accountId, opts.commentId, text, { buttons: opts.buttons })
+      await this.graph.replyToCommentPrivate(accountId, opts.commentId, text, rich)
       return { via: 'graph', method: 'private_reply' }
     }
 
@@ -138,7 +141,7 @@ export class EngineManager {
       contactsRepo.isWindowOpen(accountId, recipientIgId)
     ) {
       try {
-        await this.graph.sendDm(accountId, recipientIgId, text, { buttons: opts.buttons })
+        await this.graph.sendDm(accountId, recipientIgId, text, rich)
         return { via: 'graph', method: 'dm' }
       } catch (e) {
         // اگر موتور ساده هم وصل است، شکست رسمی (معمولا شناسه‌ی ناسازگار) نباید
@@ -149,7 +152,12 @@ export class EngineManager {
 
     // مسیر ۳: دایرکت سرد
     const engine = this.pick(accountId, 'send_dm_cold')
-    await engine.sendDm(accountId, recipientIgId, text, { buttons: opts.buttons })
+    // موتورهای غیررسمی رسانه و کارت ندارند: همه به‌صورت لینک داخل متن
+    if (opts.media || opts.cards?.length) {
+      await engine.sendDm(accountId, recipientIgId, richToText(text, rich))
+    } else {
+      await engine.sendDm(accountId, recipientIgId, text, { buttons: opts.buttons })
+    }
     return { via: engine.kind, method: 'dm' }
   }
 

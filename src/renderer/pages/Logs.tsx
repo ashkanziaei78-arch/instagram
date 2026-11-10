@@ -165,7 +165,7 @@ export function LogsPage({ accountId }: { accountId: number | null }): JSX.Eleme
           ) : (
             <div className="max-h-[560px] overflow-y-auto">
               <table className="w-full min-w-[600px]">
-                <thead className="sticky top-0 bg-[#0e1420]">
+                <thead className="sticky top-0 bg-[#171127]">
                   <tr>
                     <th className="th">نوع</th>
                     <th className="th">وضعیت</th>

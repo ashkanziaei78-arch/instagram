@@ -9,7 +9,8 @@ import type {
   ActivityLogRow,
   SafetySettings,
   Broadcast,
-  EngineKind
+  EngineKind,
+  FormQuestion
 } from '../../shared/types'
 
 /* ============================ تنظیمات ============================ */
@@ -233,8 +234,9 @@ export const accountsRepo = {
 
 /* ============================ قوانین ============================ */
 
-type RuleDbRow = Omit<Rule, 'actions' | 'enabled' | 'case_sensitive' | 'once_per_user'> & {
+type RuleDbRow = Omit<Rule, 'actions' | 'enabled' | 'case_sensitive' | 'once_per_user' | 'extra_triggers'> & {
   actions_json: string
+  extra_triggers: string | null
   enabled: number
   case_sensitive: number
   once_per_user: number
@@ -252,9 +254,17 @@ function hydrateRule(r: RuleDbRow): Rule {
     enabled: !!r.enabled,
     case_sensitive: !!r.case_sensitive,
     once_per_user: !!r.once_per_user,
+    extra_triggers: (r.extra_triggers ?? '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean) as Rule['trigger_type'][],
+    story_scope: r.story_scope ?? null,
     actions: actions.sort((a, b) => a.order - b.order)
   }
 }
+
+const joinTriggers = (r: Partial<Rule>): string =>
+  (r.extra_triggers ?? []).filter((t) => t && t !== r.trigger_type).join(',')
 
 export const rulesRepo = {
   byAccount(accountId: number): Rule[] {
@@ -267,9 +277,11 @@ export const rulesRepo = {
   active(accountId: number, trigger: Rule['trigger_type']): Rule[] {
     const rows = getDb()
       .prepare(
-        'SELECT * FROM rules WHERE account_id=? AND trigger_type=? AND enabled=1 ORDER BY priority DESC, id'
+        `SELECT * FROM rules WHERE account_id=? AND enabled=1
+           AND (trigger_type=? OR (',' || extra_triggers || ',') LIKE ?)
+         ORDER BY priority DESC, id`
       )
-      .all(accountId, trigger) as RuleDbRow[]
+      .all(accountId, trigger, '%,' + trigger + ',%') as RuleDbRow[]
     return rows.map(hydrateRule)
   },
   byId(id: number): Rule | undefined {
@@ -283,9 +295,11 @@ export const rulesRepo = {
     const info = getDb()
       .prepare(
         `INSERT INTO rules (account_id,name,enabled,trigger_type,match_mode,keywords,case_sensitive,
-            media_scope,actions_json,once_per_user,delay_min,delay_max,priority,created_at,updated_at)
+            media_scope,actions_json,once_per_user,delay_min,delay_max,priority,extra_triggers,story_scope,
+            created_at,updated_at)
          VALUES (@account_id,@name,@enabled,@trigger_type,@match_mode,@keywords,@case_sensitive,
-            @media_scope,@actions_json,@once_per_user,@delay_min,@delay_max,@priority,@t,@t)`
+            @media_scope,@actions_json,@once_per_user,@delay_min,@delay_max,@priority,@extra_triggers,@story_scope,
+            @t,@t)`
       )
       .run({
         account_id: r.account_id,
@@ -301,6 +315,8 @@ export const rulesRepo = {
         delay_min: r.delay_min ?? 5,
         delay_max: r.delay_max ?? 40,
         priority: r.priority ?? 0,
+        extra_triggers: joinTriggers(r),
+        story_scope: r.story_scope ?? null,
         t
       })
     return this.byId(Number(info.lastInsertRowid))!
@@ -314,7 +330,8 @@ export const rulesRepo = {
         `UPDATE rules SET name=@name, enabled=@enabled, trigger_type=@trigger_type,
            match_mode=@match_mode, keywords=@keywords, case_sensitive=@case_sensitive,
            media_scope=@media_scope, actions_json=@actions_json, once_per_user=@once_per_user,
-           delay_min=@delay_min, delay_max=@delay_max, priority=@priority, updated_at=@t
+           delay_min=@delay_min, delay_max=@delay_max, priority=@priority,
+           extra_triggers=@extra_triggers, story_scope=@story_scope, updated_at=@t
          WHERE id=@id`
       )
       .run({
@@ -331,6 +348,8 @@ export const rulesRepo = {
         delay_min: merged.delay_min,
         delay_max: merged.delay_max,
         priority: merged.priority,
+        extra_triggers: joinTriggers(merged),
+        story_scope: merged.story_scope ?? null,
         t: now()
       })
     return this.byId(id)
@@ -634,12 +653,17 @@ export const commentsRepo = {
       .all(accountId, limit) as Record<string, unknown>[]
   },
   /** آیا این کاربر قبلا با این قانون پاسخ گرفته؟ (once_per_user) */
-  alreadyHandled(accountId: number, ruleId: number, fromUserId: string): boolean {
+  /**
+   * آیا این کاربر قبلا از این قانون جواب گرفته؟ کامنت فعلی همین الان با
+   * markSeen ثبت شده، پس باید کنار گذاشته شود؛ وگرنه اولین کامنت هر کس هم
+   * «تکراری» حساب می‌شد و هیچ‌وقت دایرکت نمی‌رفت.
+   */
+  alreadyHandled(accountId: number, ruleId: number, fromUserId: string, exceptCommentId = ''): boolean {
     const r = getDb()
       .prepare(
-        'SELECT 1 FROM comments_seen WHERE account_id=? AND matched_rule_id=? AND from_user_id=? LIMIT 1'
+        'SELECT 1 FROM comments_seen WHERE account_id=? AND matched_rule_id=? AND from_user_id=? AND comment_id<>? LIMIT 1'
       )
-      .get(accountId, ruleId, fromUserId)
+      .get(accountId, ruleId, fromUserId, exceptCommentId)
     return !!r
   }
 }
@@ -997,6 +1021,84 @@ export const followerPollRepo = {
         s.last_known_count ?? cur.last_known_count,
         s.baseline_done ?? cur.baseline_done,
         accountId
+      )
+  }
+}
+
+/* ============================ فرم داخل دایرکت ============================ */
+
+export interface FormSession {
+  account_id: number
+  contact_ig_id: string
+  rule_id: number
+  step: number
+  questions: FormQuestion[]
+  answers: Record<string, string>
+  done_text: string | null
+  id_source: string | null
+  expires_at: number
+}
+
+type FormDbRow = Omit<FormSession, 'questions' | 'answers'> & { questions_json: string; answers_json: string }
+
+export const formsRepo = {
+  /** فرم باز این مخاطب؛ فرمی که مهلتش (۲۴ ساعت) گذشته حذف می‌شود */
+  get(accountId: number, contactIgId: string): FormSession | undefined {
+    const r = getDb()
+      .prepare('SELECT * FROM form_sessions WHERE account_id=? AND contact_ig_id=?')
+      .get(accountId, contactIgId) as FormDbRow | undefined
+    if (!r) return undefined
+    if (r.expires_at < now()) {
+      this.close(accountId, contactIgId)
+      return undefined
+    }
+    return { ...r, questions: JSON.parse(r.questions_json), answers: JSON.parse(r.answers_json || '{}') }
+  },
+  start(f: Omit<FormSession, 'step' | 'answers' | 'expires_at'>): void {
+    getDb()
+      .prepare(
+        `INSERT INTO form_sessions (account_id,contact_ig_id,rule_id,step,questions_json,answers_json,done_text,id_source,expires_at)
+         VALUES (?,?,?,0,?,'{}',?,?,?)
+         ON CONFLICT(account_id,contact_ig_id) DO UPDATE SET rule_id=excluded.rule_id, step=0,
+           questions_json=excluded.questions_json, answers_json='{}', done_text=excluded.done_text,
+           id_source=excluded.id_source, expires_at=excluded.expires_at`
+      )
+      .run(
+        f.account_id,
+        f.contact_ig_id,
+        f.rule_id,
+        JSON.stringify(f.questions),
+        f.done_text,
+        f.id_source,
+        now() + 24 * 3600 * 1000
+      )
+  },
+  advance(accountId: number, contactIgId: string, step: number, answers: Record<string, string>): void {
+    getDb()
+      .prepare('UPDATE form_sessions SET step=?, answers_json=? WHERE account_id=? AND contact_ig_id=?')
+      .run(step, JSON.stringify(answers), accountId, contactIgId)
+  },
+  close(accountId: number, contactIgId: string): void {
+    getDb().prepare('DELETE FROM form_sessions WHERE account_id=? AND contact_ig_id=?').run(accountId, contactIgId)
+  },
+  /** جواب‌ها روی خود مخاطب می‌نشیند تا در صفحه‌ی مخاطبان و خروجی دیده شود */
+  saveAnswers(accountId: number, contactIgId: string, answers: Record<string, string>): void {
+    getDb()
+      .prepare(
+        `UPDATE contacts SET
+           full_name = COALESCE(?, full_name),
+           phone = COALESCE(?, phone),
+           email = COALESCE(?, email),
+           form_answers = ?
+         WHERE account_id=? AND ig_user_id=?`
+      )
+      .run(
+        answers.name ?? null,
+        answers.phone ?? null,
+        answers.email ?? null,
+        JSON.stringify(answers),
+        accountId,
+        contactIgId
       )
   }
 }

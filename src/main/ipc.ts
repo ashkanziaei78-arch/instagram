@@ -467,7 +467,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       const rule = rulesRepo.byId(p.ruleId)
       if (!rule) return fail('قانون پیدا نشد')
 
-      const match = findMatchingRule([rule], p.text, undefined)
+      const isComment = rule.trigger_type === 'comment_keyword' || rule.trigger_type === 'comment_any'
+      const firstMedia = rule.media_scope?.split(',')[0]?.trim() || undefined
+      const match = findMatchingRule([rule], p.text, firstMedia, isComment ? 'comment' : 'dm')
       const vars = templateVarsFrom({
         accountId: rule.account_id,
         userIgId: 'test_user',
@@ -490,6 +492,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     /* ═══════════════ مدیا ═══════════════ */
 
     listMedia: (p: { accountId: number; limit?: number }) => ok(mediaRepo.list(p.accountId, p.limit ?? 50)),
+
+    listStories: async (p: { accountId: number }) => {
+      if (!engines().graph.isConnected(p.accountId)) {
+        return fail('برای دیدن استوری‌ها، حساب باید با «API رسمی» وصل باشد', 'از صفحه‌ی حساب‌ها اتصال رسمی را بزنید')
+      }
+      try {
+        return ok(await engines().graph.listStories(p.accountId))
+      } catch (e) {
+        return fail('استوری‌ها خوانده نشد: ' + (e as Error).message)
+      }
+    },
 
     syncMedia: async (p: { accountId: number }) => {
       const r = await pollMedia(p.accountId)

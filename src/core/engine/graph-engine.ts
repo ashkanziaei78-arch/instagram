@@ -1,4 +1,4 @@
-import type { Capability, EngineKind } from '../../shared/types'
+import type { Capability, EngineKind, MessageMedia } from '../../shared/types'
 import { logRepo } from '../db/repos'
 import {
   AuthError,
@@ -180,6 +180,24 @@ export class GraphEngine implements IEngine {
     }
   }
 
+  /** استوری‌های فعال؛ فقط ۲۴ ساعت می‌مانند، پس لیست کوتاه است */
+  async listStories(
+    accountId: number
+  ): Promise<{ id: string; media_type: string; thumbnail_url?: string; timestamp: number }[]> {
+    const d = await this.request<{
+      data?: { id: string; media_type: string; media_url?: string; thumbnail_url?: string; timestamp: string }[]
+    }>(accountId, '/me/stories', {
+      query: { fields: 'id,media_type,media_url,thumbnail_url,timestamp' },
+      context: 'دریافت استوری‌ها'
+    })
+    return (d.data ?? []).map((m) => ({
+      id: m.id,
+      media_type: m.media_type,
+      thumbnail_url: m.thumbnail_url ?? (m.media_type === 'IMAGE' ? m.media_url : undefined),
+      timestamp: Date.parse(m.timestamp) || 0
+    }))
+  }
+
   async listMedia(accountId: number, limit = 25): Promise<IgMedia[]> {
     const d = await this.request<{
       data: {
@@ -315,8 +333,32 @@ export class GraphEngine implements IEngine {
     return id
   }
 
-  /** ساخت بدنه‌ی پیام؛ اگر دکمه داشت به فرمت generic template متا تبدیل می‌شود */
+  /**
+   * ساخت بدنه‌ی پیام: کارت‌های کاتالوگ → generic template، دکمه → button
+   * template، وگرنه متن ساده.
+   */
   private messageBody(text: string, opts?: SendDmOptions): Record<string, unknown> {
+    if (opts?.cards && opts.cards.length > 0) {
+      return {
+        attachment: {
+          type: 'template',
+          payload: {
+            template_type: 'generic',
+            elements: opts.cards.slice(0, 10).map((c) => ({
+              title: c.title.slice(0, 80),
+              ...(c.subtitle ? { subtitle: c.subtitle.slice(0, 80) } : {}),
+              ...(c.imageUrl ? { image_url: c.imageUrl } : {}),
+              ...(c.url
+                ? {
+                    default_action: { type: 'web_url', url: c.url },
+                    buttons: [{ type: 'web_url', url: c.url, title: (c.buttonTitle || 'مشاهده').slice(0, 20) }]
+                  }
+                : {})
+            }))
+          }
+        }
+      }
+    }
     if (opts?.buttons && opts.buttons.length > 0) {
       return {
         attachment: {
@@ -339,6 +381,10 @@ export class GraphEngine implements IEngine {
     return { text }
   }
 
+  private mediaBody(m: MessageMedia): Record<string, unknown> {
+    return { attachment: { type: m.kind, payload: { url: m.url } } }
+  }
+
   /**
    * پاسخ خصوصی به کامنت — ستون فقرات «کامنت به دایرکت».
    *
@@ -353,12 +399,21 @@ export class GraphEngine implements IEngine {
     text: string,
     opts?: SendDmOptions
   ): Promise<void> {
+    // پاسخ خصوصی فقط *یک* پیام است. رسانه‌ی تنها خودش می‌رود؛ رسانه + متن
+    // یعنی متن با دکمه‌ی «مشاهده» که به همان رسانه لینک می‌دهد، تا چیزی گم نشود.
+    let message: Record<string, unknown>
+    if (opts?.media?.url && !opts.cards?.length) {
+      message = text.trim()
+        ? this.messageBody(text, {
+            buttons: [...(opts.buttons ?? []), { title: 'مشاهده', url: opts.media.url }].slice(0, 3)
+          })
+        : this.mediaBody(opts.media)
+    } else {
+      message = this.messageBody(text, opts)
+    }
     await this.request(accountId, '/' + this.igUserId(accountId) + '/messages', {
       method: 'POST',
-      body: {
-        recipient: { comment_id: commentId },
-        message: this.messageBody(text, opts)
-      },
+      body: { recipient: { comment_id: commentId }, message },
       context: 'پاسخ خصوصی به کامنت'
     })
   }
@@ -372,14 +427,17 @@ export class GraphEngine implements IEngine {
     if (opts?.commentId) {
       return this.replyToCommentPrivate(accountId, opts.commentId, text, opts)
     }
-    await this.request(accountId, '/' + this.igUserId(accountId) + '/messages', {
-      method: 'POST',
-      body: {
-        recipient: { id: recipientIgId },
-        message: this.messageBody(text, opts)
-      },
-      context: 'ارسال دایرکت'
-    })
+    const send = (message: Record<string, unknown>, context: string) =>
+      this.request(accountId, '/' + this.igUserId(accountId) + '/messages', {
+        method: 'POST',
+        body: { recipient: { id: recipientIgId }, message },
+        context
+      })
+    // داخل پنجره‌ی ۲۴ ساعته چند پیام مجاز است: اول متن/کارت، بعد رسانه
+    if (text.trim() || opts?.cards?.length || opts?.buttons?.length) {
+      await send(this.messageBody(text, opts), 'ارسال دایرکت')
+    }
+    if (opts?.media?.url) await send(this.mediaBody(opts.media), 'ارسال رسانه')
   }
 
   /**

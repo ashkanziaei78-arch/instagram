@@ -133,7 +133,7 @@ export function AnalyticsPage({ accountId }: { accountId: number | null }): JSX.
                 <YAxis tick={{ fill: '#64748b', fontSize: 11 }} stroke="#ffffff10" width={52} />
                 <Tooltip
                   contentStyle={{
-                    background: '#0e1420',
+                    background: '#171127',
                     border: '1px solid #ffffff18',
                     borderRadius: 8,
                     fontSize: 12
@@ -142,7 +142,7 @@ export function AnalyticsPage({ accountId }: { accountId: number | null }): JSX.
                 />
                 <Bar dataKey="views" name="ویو" radius={[4, 4, 0, 0]}>
                   {topPosts.map((_, i) => (
-                    <Cell key={i} fill={i === topPosts.length - 1 ? '#e1306c' : '#833ab4'} />
+                    <Cell key={i} fill={i === topPosts.length - 1 ? '#e1306c' : '#5b2ef0'} />
                   ))}
                 </Bar>
               </BarChart>

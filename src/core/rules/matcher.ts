@@ -144,13 +144,19 @@ export interface RuleMatch {
 export function findMatchingRule(
   rules: Rule[],
   text: string,
-  mediaId?: string
+  mediaId?: string,
+  /**
+   * از کجا آمده. محدوده‌ی پست فقط برای کامنت معنا دارد: قانونی که هم روی یک
+   * پست خاص و هم روی دایرکت کار می‌کند، نباید در دایرکت به خاطر «پست ندارد» رد شود.
+   */
+  source: 'comment' | 'dm' | 'story' = 'comment'
 ): RuleMatch | null {
   for (const rule of rules) {
     if (!rule.enabled) continue
-    if (!ruleAppliesToMedia(rule, mediaId)) continue
+    if (source === 'comment' && !ruleAppliesToMedia(rule, mediaId)) continue
 
-    if (rule.trigger_type === 'comment_any') {
+    const triggers = [rule.trigger_type, ...(rule.extra_triggers ?? [])]
+    if (source === 'comment' && triggers.includes('comment_any') && !triggers.includes('comment_keyword')) {
       return { rule, reason: 'قانون روی همه‌ی کامنت‌ها اعمال می‌شود' }
     }
 

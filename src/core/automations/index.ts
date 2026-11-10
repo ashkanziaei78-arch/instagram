@@ -7,15 +7,16 @@ import {
   messagesRepo,
   rulesRepo,
   settingsRepo,
-  jobsRepo
+  jobsRepo,
+  formsRepo
 } from '../db/repos'
 import { engines } from '../engine'
 import { jobQueue } from '../queue/job-queue'
 import { findMatchingRule } from '../rules/matcher'
 import { enqueueRuleActions, type TriggerContext } from '../rules/runner'
 import { aiReady, generateReply } from '../ai/reply'
-import { buildMessage, humanDelayMs } from '../text'
-import type { BroadcastTargetFilter } from '../../shared/types'
+import { buildMessage, humanDelayMs, toLatinDigits } from '../text'
+import type { BroadcastTargetFilter, CatalogCard, FormQuestion, MessageMedia } from '../../shared/types'
 
 /* ══════════════════════════ ۱. کامنت به دایرکت ══════════════════════════ */
 
@@ -77,7 +78,7 @@ export async function handleIncomingComment(c: IncomingComment): Promise<{ handl
   if (!match) return { handled: false, reason: 'هیچ قانونی تطبیق نیافت' }
 
   // ۴. شرط یک‌بار به ازای هر کاربر
-  if (match.rule.once_per_user && commentsRepo.alreadyHandled(c.accountId, match.rule.id, c.fromUserId)) {
+  if (match.rule.once_per_user && commentsRepo.alreadyHandled(c.accountId, match.rule.id, c.fromUserId, c.commentId)) {
     return { handled: false, reason: 'این کاربر قبلا از این قانون پاسخ گرفته' }
   }
 
@@ -117,6 +118,8 @@ export interface IncomingDm {
   text: string
   messageId?: string
   idSource?: 'web' | 'graph'
+  /** برای جواب استوری: شناسه‌ی همان استوری، اگر منبع رویداد آن را داده باشد */
+  storyId?: string
 }
 
 export async function handleIncomingDm(d: IncomingDm): Promise<{ handled: boolean; reason: string }> {
@@ -132,8 +135,12 @@ export async function handleIncomingDm(d: IncomingDm): Promise<{ handled: boolea
     text: d.text
   })
 
+  // اگر این نفر وسط پر کردن فرم است، این پیام جواب سؤال فرم است نه کلیدواژه
+  const form = formsRepo.get(d.accountId, d.fromUserId)
+  if (form) return answerForm(form, d)
+
   const rules = rulesRepo.active(d.accountId, 'dm_keyword')
-  const match = rules.length > 0 ? findMatchingRule(rules, d.text) : null
+  const match = rules.length > 0 ? findMatchingRule(rules, d.text, undefined, 'dm') : null
   if (!match) {
     // هیچ قانونی نخورد: اگر جواب هوشمند روشن است، به‌جای سکوت او جواب می‌دهد
     if (aiReady()) {
@@ -171,6 +178,75 @@ export async function handleIncomingDm(d: IncomingDm): Promise<{ handled: boolea
   return { handled: queued > 0, reason: 'قانون «' + match.rule.name + '» فعال شد' }
 }
 
+/* ══════════════════════════ ۲.۴ فرم داخل دایرکت ══════════════════════════ */
+
+const PHONE_RE = /^(?:\+?98|0)?9\d{9}$/
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
+/** اعتبارسنجی جواب؛ null یعنی جواب قابل قبول نیست */
+export function validateAnswer(kind: string, raw: string): string | null {
+  const v = raw.trim()
+  if (!v) return null
+  if (kind === 'phone') {
+    const digits = toLatinDigits(v).replace(/[\s\-()]/g, '')
+    if (!PHONE_RE.test(digits)) return null
+    return '0' + digits.replace(/^(?:\+?98|0)/, '')
+  }
+  if (kind === 'email') return EMAIL_RE.test(v) ? v.toLowerCase() : null
+  return v.slice(0, 200)
+}
+
+const RETRY_TEXT: Record<string, string> = {
+  phone: 'شماره درست نیست 🙏 لطفاً شماره‌ی موبایل را مثل ۰۹۱۲۳۴۵۶۷۸۹ بفرستید.',
+  email: 'ایمیل درست نیست 🙏 لطفاً مثل name@gmail.com بفرستید.',
+  name: 'لطفاً اسمتان را بنویسید 🙏',
+  custom: 'لطفاً جواب را بنویسید 🙏'
+}
+
+function queueText(d: IncomingDm, text: string, key: string): void {
+  jobsRepo.enqueue({
+    account_id: d.accountId,
+    kind: 'dm.send',
+    run_at: Date.now() + humanDelayMs(2, 6),
+    dedupe_key: key,
+    payload: { recipientIgId: d.fromUserId, username: d.fromUsername, text, idSource: d.idSource }
+  })
+}
+
+function answerForm(form: NonNullable<ReturnType<typeof formsRepo.get>>, d: IncomingDm): { handled: boolean; reason: string } {
+  const q = form.questions[form.step]
+  if (!q) {
+    formsRepo.close(d.accountId, d.fromUserId)
+    return { handled: false, reason: 'فرم تمام شده بود' }
+  }
+  const msgKey = 'form:' + d.accountId + ':' + d.fromUserId + ':' + (d.messageId ?? form.step + ':' + d.text.slice(0, 40))
+  const value = validateAnswer(q.kind, d.text)
+  if (value === null) {
+    queueText(d, RETRY_TEXT[q.kind] ?? RETRY_TEXT.custom, msgKey)
+    return { handled: true, reason: 'جواب فرم معتبر نبود — دوباره پرسیده شد' }
+  }
+
+  const key = q.kind === 'custom' ? q.ask.slice(0, 40) : q.kind
+  const answers = { ...form.answers, [key]: value }
+  const next = form.questions[form.step + 1]
+  if (next) {
+    formsRepo.advance(d.accountId, d.fromUserId, form.step + 1, answers)
+    queueText(d, next.ask, msgKey)
+    return { handled: true, reason: 'جواب فرم ثبت شد — سؤال بعدی رفت' }
+  }
+
+  formsRepo.saveAnswers(d.accountId, d.fromUserId, answers)
+  formsRepo.close(d.accountId, d.fromUserId)
+  if (form.done_text) queueText(d, form.done_text, msgKey)
+  logRepo.add({
+    account_id: d.accountId,
+    level: 'success',
+    category: 'form',
+    message: 'فرم @' + (d.fromUsername ?? d.fromUserId) + ' کامل شد: ' + Object.values(answers).join(' / ')
+  })
+  return { handled: true, reason: 'فرم کامل شد' }
+}
+
 /* ══════════════════════════ ۲.۵ جواب به استوری و منشن (ایده از InstaAuto) ══════════════════════════ */
 
 /**
@@ -192,9 +268,15 @@ export async function handleStoryEvent(d: IncomingDm & { kind: 'story_reply' | '
   const label = d.kind === 'story_reply' ? 'جواب استوری' : 'منشن در استوری'
   if (rules.length === 0) return { handled: false, reason: label + ' — قانون فعالی برایش نیست' }
 
-  const withKw = rules.filter((r) => r.keywords.trim())
-  const match = d.text ? findMatchingRule(withKw, d.text) : null
-  const rule = match?.rule ?? rules.find((r) => !r.keywords.trim())
+  // قانونی که به استوری‌های خاصی محدود است، فقط وقتی می‌خورد که بدانیم جواب
+  // به کدام استوری است — وگرنه جواب استوری دیگری هم پیام می‌گرفت
+  const inScope = rules.filter((r) => {
+    if (trigger !== 'story_reply' || !r.story_scope?.trim()) return true
+    return !!d.storyId && r.story_scope.split(',').map((x) => x.trim()).includes(d.storyId)
+  })
+  const withKw = inScope.filter((r) => r.keywords.trim())
+  const match = d.text ? findMatchingRule(withKw, d.text, undefined, 'story') : null
+  const rule = match?.rule ?? inScope.find((r) => !r.keywords.trim())
   if (!rule) return { handled: false, reason: label + ' — هیچ قانونی تطبیق نیافت' }
 
   const queued = enqueueRuleActions(rule, {
@@ -432,11 +514,25 @@ export function registerJobHandlers(): void {
       const text = String(payload.text ?? '')
       const commentId = payload.commentId ? String(payload.commentId) : undefined
       const buttons = payload.buttons as { title: string; url: string }[] | undefined
+      const media = payload.media as MessageMedia | undefined
+      const cards = payload.cards as CatalogCard[] | undefined
+      const form = payload.form as { questions: FormQuestion[]; doneText?: string } | undefined
       const ruleId = payload.ruleId ? Number(payload.ruleId) : null
       const broadcastId = payload.broadcastId ? Number(payload.broadcastId) : null
       const targetRowId = payload.targetRowId ? Number(payload.targetRowId) : null
 
-      if (!recipientIgId || !text) throw new Error('گیرنده یا متن پیام خالی است')
+      if (!recipientIgId || (!text && !media && !cards?.length)) throw new Error('گیرنده یا متن پیام خالی است')
+
+      // پیام پیگیری فقط داخل پنجره‌ی ۲۴ ساعته؛ بیرونش دایرکت سرد می‌شد
+      if (payload.requireWindow && !contactsRepo.isWindowOpen(job.account_id, recipientIgId)) {
+        logRepo.add({
+          account_id: job.account_id,
+          level: 'info',
+          category: 'dm',
+          message: 'پیام پیگیری به @' + (payload.username ?? recipientIgId) + ' نرفت: در ۲۴ ساعت گذشته پیامی نداده بود'
+        })
+        return
+      }
 
       const idSource = payload.idSource === 'web' || payload.idSource === 'graph' ? payload.idSource : undefined
       const followGate = payload.followGate ? String(payload.followGate) : ''
@@ -458,8 +554,20 @@ export function registerJobHandlers(): void {
         const res = await engines().sendDmSmart(job.account_id, recipientIgId, text, {
           commentId,
           buttons,
+          media,
+          cards,
           idSource
         })
+        if (form?.questions?.length && ruleId) {
+          formsRepo.start({
+            account_id: job.account_id,
+            contact_ig_id: recipientIgId,
+            rule_id: ruleId,
+            questions: form.questions,
+            done_text: form.doneText ?? null,
+            id_source: idSource ?? null
+          })
+        }
 
         contactsRepo.markOutbound(job.account_id, recipientIgId)
         messagesRepo.log({

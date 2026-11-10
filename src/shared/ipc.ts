@@ -113,6 +113,13 @@ export interface LicenseView {
 }
 
 /** امضای همه‌ی متدهای قابل‌صدازدن از renderer */
+export interface StoryItem {
+  id: string
+  media_type: string
+  thumbnail_url?: string
+  timestamp: number
+}
+
 export interface IpcApi {
   /* اشتراک */
   getLicense(): Promise<ApiResult<LicenseView>>
@@ -152,6 +159,8 @@ export interface IpcApi {
   /* مدیا و آنالیتیکس */
   listMedia(p: { accountId: number; limit?: number }): Promise<ApiResult<MediaRow[]>>
   syncMedia(p: { accountId: number }): Promise<ApiResult<{ total: number; newPosts: number; message: string }>>
+  /** استوری‌های فعال (۲۴ ساعت اخیر) برای انتخاب در «یک یا چند استوری خاص» — فقط API رسمی */
+  listStories(p: { accountId: number }): Promise<ApiResult<StoryItem[]>>
 
   /* مخاطبان */
   listContacts(p: { accountId: number; audience?: string; limit?: number }): Promise<ApiResult<ContactSummary[]>>
@@ -244,6 +253,7 @@ export const IPC_CHANNELS: IpcChannel[] = [
   'testRule',
   'listMedia',
   'syncMedia',
+  'listStories',
   'listContacts',
   'syncFollowers',
   'syncFollowing',

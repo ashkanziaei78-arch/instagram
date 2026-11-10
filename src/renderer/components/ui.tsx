@@ -245,7 +245,7 @@ export function Modal({
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/65 p-6 backdrop-blur-sm">
       <div
         className={
-          'rise card my-auto w-full bg-[#0e1420] shadow-2xl ' + (wide ? 'max-w-3xl' : 'max-w-xl')
+          'rise card my-auto w-full bg-[#171127] shadow-2xl ' + (wide ? 'max-w-3xl' : 'max-w-xl')
         }
       >
         <header className="flex items-start justify-between gap-3 border-b border-white/[0.06] px-5 py-3.5">
